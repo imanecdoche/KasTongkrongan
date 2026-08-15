@@ -443,30 +443,124 @@ export const ReportModule: React.FC<ReportModuleProps> = ({ state, onShowToast }
     }
   };
 
-  // 7. Salin Teks Ringkasan Laporan
-  const handleCopyWhatsAppSummary = () => {
-    let text = `📑 *${dateRange.title.toUpperCase()}*\n`;
-    text += `📅 ${dateRange.subtitle}\n`;
-    text += `👤 Bendahara: ${state.config.treasurer_name}\n`;
-    text += `━━━━━━━━━━━━━━━━━━━━\n`;
-    text += `💰 Total Kas Masuk: Rp ${formatRupiah(metrics.totalMasuk)}\n`;
-    text += `💸 Total Kas Keluar: Rp ${formatRupiah(metrics.totalKeluar)}\n`;
-    text += `⚖️ Arus Kas Bersih (Net): Rp ${formatRupiah(metrics.netCashflow)}\n`;
-    text += `🤝 Sisa Piutang Berjalan: Rp ${formatRupiah(metrics.activeDebt)}\n`;
-    text += `━━━━━━━━━━━━━━━━━━━━\n\n`;
+  // 7. Helper Format Teks Monospace untuk WhatsApp (Menggunakan Triple Backticks ``` agar font mono di WA)
+  const generateWhatsAppReportText = () => {
+    const padR = (str: string, len: number) => {
+      const s = String(str || '');
+      if (s.length > len) return s.slice(0, len - 1) + '…';
+      return s.padEnd(len, ' ');
+    };
 
+    const padL = (str: string, len: number) => {
+      const s = String(str || '');
+      if (s.length > len) return s.slice(0, len);
+      return s.padStart(len, ' ');
+    };
+
+    let text = `📢 *LAPORAN ARUS KAS TONGKRONGAN*\n`;
+    text += `📑 *${dateRange.title.toUpperCase()}*\n`;
+    text += `📅 Periode: ${dateRange.subtitle}\n`;
+    text += `👤 Bendahara: ${state.config.treasurer_name}\n`;
+    text += `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n`;
+
+    // 1. Monospace Financial Summary Table
+    text += `*💰 RINGKASAN KEUANGAN:*\n`;
+    text += `\`\`\`\n`;
+    text += `=========================================\n`;
+    text += `  POS KEUANGAN              NOMINAL      \n`;
+    text += `=========================================\n`;
+    text += `${padR('Total Kas Masuk', 24)}: ${padL(`Rp ${formatRupiah(metrics.totalMasuk)}`, 14)}\n`;
+    text += `${padR('Total Kas Keluar', 24)}: ${padL(`Rp ${formatRupiah(metrics.totalKeluar)}`, 14)}\n`;
+    text += `-----------------------------------------\n`;
+    text += `${padR('Arus Kas Bersih (Net)', 24)}: ${padL(`${metrics.netCashflow >= 0 ? '+' : ''}Rp ${formatRupiah(metrics.netCashflow)}`, 14)}\n`;
+    text += `${padR('Sisa Piutang Berjalan', 24)}: ${padL(`Rp ${formatRupiah(metrics.activeDebt)}`, 14)}\n`;
+    text += `${padR('Total Mutasi', 24)}: ${padL(`${reportTransactions.length} Transaksi`, 14)}\n`;
+    text += `=========================================\n`;
+    text += `\`\`\`\n\n`;
+
+    // 2. Monospace Transaction Mutation Journal
+    text += `*📋 JURNAL MUTASI TRANSAKSI (${reportTransactions.length} ENTRI):*\n`;
+    text += `\`\`\`\n`;
+    text += `==============================================\n`;
+    text += `TGL    NAMA          KAT       MET     NOMINAL\n`;
+    text += `==============================================\n`;
+
+    if (reportTransactions.length === 0) {
+      text += `      Tidak ada transaksi pada periode ini    \n`;
+    } else {
+      reportTransactions.forEach((tx) => {
+        const txDate = new Date(tx.created_at);
+        const dateStr = `${String(txDate.getDate()).padStart(2, '0')}/${String(txDate.getMonth() + 1).padStart(2, '0')}`;
+        const nameStr = padR(tx.member_name || 'Kas', 13);
+        
+        let catShort = tx.category.replace(/_/g, ' ').toUpperCase();
+        if (catShort.length > 9) catShort = catShort.slice(0, 8) + '…';
+        const catStr = padR(catShort, 9);
+        
+        const metStr = padR(tx.method.toUpperCase(), 4);
+        const sign = tx.direction === 'masuk' ? '+' : '-';
+        const amtStr = padL(`${sign}${formatRupiah(tx.amount)}`, 11);
+
+        text += `${dateStr}  ${nameStr} ${catStr} ${metStr} ${amtStr}\n`;
+      });
+    }
+    text += `==============================================\n`;
+    text += `\`\`\`\n\n`;
+
+    // 3. Member Detail / Status Table
     if (reportType === 'per_anggota' && selectedMember && selectedMemberStats) {
-      text += `👤 *STATUS ANGGOTA: ${selectedMember.name}*\n`;
-      text += `• Total Setor: Rp ${formatRupiah(selectedMemberStats.totalMasuk)}\n`;
-      text += `• Sisa Hutang: Rp ${formatRupiah(selectedMemberStats.sisaHutang)}\n`;
-      text += `• Denda Belum Bayar: Rp ${formatRupiah(selectedMemberStats.dendaTertunda)}\n`;
-      text += `• Kepatuhan: ${selectedMemberStats.skorKepatuhan}% (${selectedMemberStats.labelKepatuhan})\n\n`;
+      text += `*👤 REKAM JEJAK ANGGOTA: ${selectedMember.name.toUpperCase()}*\n`;
+      text += `\`\`\`\n`;
+      text += `=========================================\n`;
+      text += `${padR('Role / Peran', 20)}: ${padL(selectedMember.role.toUpperCase(), 18)}\n`;
+      text += `${padR('Total Iuran & Setor', 20)}: ${padL(`Rp ${formatRupiah(selectedMemberStats.totalMasuk)}`, 18)}\n`;
+      text += `${padR('Sisa Pinjaman', 20)}: ${padL(`Rp ${formatRupiah(selectedMemberStats.sisaHutang)}`, 18)}\n`;
+      text += `${padR('Denda Tertunda', 20)}: ${padL(`Rp ${formatRupiah(selectedMemberStats.dendaTertunda)}`, 18)}\n`;
+      text += `${padR('Sisa Limit Kredit', 20)}: ${padL(`Rp ${formatRupiah(selectedMember.credit_limit || 0)}`, 18)}\n`;
+      text += `${padR('Skor Kepatuhan', 20)}: ${padL(`${selectedMemberStats.skorKepatuhan}% (${selectedMemberStats.labelKepatuhan})`, 18)}\n`;
+      text += `=========================================\n`;
+      text += `\`\`\`\n\n`;
+    } else {
+      // General member status table
+      text += `*👥 STATUS ANGGOTA KAS:*\n`;
+      text += `\`\`\`\n`;
+      text += `==============================================\n`;
+      text += `NAMA           TOTAL SETOR  SISA HUTANG  SKOR \n`;
+      text += `==============================================\n`;
+      state.users.forEach((u) => {
+        const stats = calculateMemberStats(u, state);
+        const nameCol = padR(u.name, 14);
+        const setorCol = padL(formatRupiah(stats.totalMasuk), 11);
+        const hutangCol = padL(formatRupiah(stats.sisaHutang), 11);
+        const scoreCol = padL(`${stats.skorKepatuhan}%`, 5);
+        text += `${nameCol} ${setorCol}  ${hutangCol}  ${scoreCol}\n`;
+      });
+      text += `==============================================\n`;
+      text += `\`\`\`\n\n`;
     }
 
-    text += `_Laporan dibuat otomatis via Sistem Kas Tongkrongan._`;
+    // 4. Payment Info & Footer
+    text += `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n`;
+    text += `💳 *Informasi Pembayaran / Transfer Kas:*\n`;
+    if (state.config.treasurer_bank_name) {
+      text += `• Bank: *${state.config.treasurer_bank_name}* - ${state.config.treasurer_account_number} (a/n ${state.config.treasurer_name})\n`;
+    }
+    if (state.config.treasurer_ewallet) {
+      text += `• E-Wallet (GoPay/DANA/OVO/ShopeePay): *${state.config.treasurer_ewallet}*\n`;
+    }
+    text += `\n_Laporan transparan dibuat otomatis via Sistem Kas Tongkrongan._`;
 
+    return text;
+  };
+
+  // State Pratinjau Teks WhatsApp
+  const [showWhatsAppPreview, setShowWhatsAppPreview] = useState(false);
+
+  // Salin Teks Ringkasan Laporan
+  const handleCopyWhatsAppSummary = () => {
+    const text = generateWhatsAppReportText();
     navigator.clipboard.writeText(text);
-    onShowToast('📋 Ringkasan laporan disalin! Siap dikirim ke WhatsApp.');
+    onShowToast('📋 Format WhatsApp (Font Monospace) berhasil disalin! Kolom jurnal mutasi tertata rapi.');
   };
 
   return (
@@ -515,13 +609,55 @@ export const ReportModule: React.FC<ReportModuleProps> = ({ state, onShowToast }
             <button
               type="button"
               onClick={handleCopyWhatsAppSummary}
-              className="p-2 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200 rounded-xl text-xs font-bold transition-colors cursor-pointer"
-              title="Salin Ringkasan untuk WhatsApp"
+              className="px-3.5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold transition-all shadow-sm flex items-center gap-1.5 cursor-pointer"
+              title="Salin Pesan WhatsApp Format Monospace Rapi"
             >
               <Copy className="w-4 h-4" />
+              <span>Salin WA (Mono)</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setShowWhatsAppPreview((prev) => !prev)}
+              className={`p-2 rounded-xl text-xs font-bold border transition-colors cursor-pointer ${
+                showWhatsAppPreview
+                  ? 'bg-slate-900 text-white border-slate-900'
+                  : 'bg-slate-100 hover:bg-slate-200 text-slate-700 border-slate-300'
+              }`}
+              title="Tampilkan / Sembunyikan Pratinjau Teks WhatsApp"
+            >
+              <Receipt className="w-4 h-4" />
             </button>
           </div>
         </div>
+
+        {/* WhatsApp Monospace Live Preview Block (Collapsible) */}
+        {showWhatsAppPreview && (
+          <div className="p-4 bg-slate-900 rounded-xl border border-slate-700 text-slate-100 space-y-3">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
+                <h4 className="text-xs font-bold text-slate-200 font-heading">
+                  Pratinjau Format WhatsApp (JetBrains Mono / Monospace)
+                </h4>
+              </div>
+              <button
+                type="button"
+                onClick={handleCopyWhatsAppSummary}
+                className="px-2.5 py-1 bg-emerald-500 hover:bg-emerald-600 text-white text-[11px] font-bold rounded-lg flex items-center gap-1 cursor-pointer transition-colors"
+              >
+                <Copy className="w-3 h-3" />
+                <span>Salin Teks</span>
+              </button>
+            </div>
+            <p className="text-[11px] text-slate-400">
+              Setiap kolom dirancang rata dan sejajar dengan font fixed-width (monospace) saat dikirim ke grup WhatsApp.
+            </p>
+            <pre className="p-3 bg-slate-950 rounded-lg text-[11px] font-mono text-emerald-400 overflow-x-auto whitespace-pre leading-relaxed border border-slate-800">
+              {generateWhatsAppReportText()}
+            </pre>
+          </div>
+        )}
 
         {/* Report Scope Selector Pills */}
         <div className="flex flex-wrap items-center gap-2 pt-2 border-t border-slate-100">
@@ -1012,13 +1148,13 @@ export const ReportModule: React.FC<ReportModuleProps> = ({ state, onShowToast }
 
                     return (
                       <tr key={tx.id} className="hover:bg-slate-50/80 transition-colors">
-                        <td className="py-2.5 px-3 whitespace-nowrap text-slate-600">
+                        <td className="py-2.5 px-3 whitespace-nowrap text-slate-600 font-mono">
                           {txDate.toLocaleDateString('id-ID', {
                             day: 'numeric',
                             month: 'short',
                             year: 'numeric',
                           })}
-                          <span className="block text-[10px] text-slate-400">
+                          <span className="block text-[10px] text-slate-400 font-mono">
                             {txDate.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })}
                           </span>
                         </td>
@@ -1034,13 +1170,13 @@ export const ReportModule: React.FC<ReportModuleProps> = ({ state, onShowToast }
                           )}
                         </td>
                         <td className="py-2.5 px-3 text-center">
-                          <span className="px-2 py-0.5 rounded-full text-[10px] font-bold uppercase bg-slate-100 text-slate-600">
+                          <span className="px-2 py-0.5 rounded-full text-[10px] font-bold uppercase bg-slate-100 text-slate-600 font-mono">
                             {tx.method}
                           </span>
                         </td>
-                        <td className="py-2.5 px-3 text-right whitespace-nowrap">
+                        <td className="py-2.5 px-3 text-right whitespace-nowrap font-mono">
                           <span
-                            className={`font-black font-heading ${
+                            className={`font-black ${
                               isMasuk ? 'text-emerald-600' : 'text-rose-600'
                             }`}
                           >

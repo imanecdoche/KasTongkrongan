@@ -40,18 +40,39 @@ export const ReceiptModal: React.FC<ReceiptModalProps> = ({ isOpen, onClose, tra
   };
 
   const copyReceiptText = () => {
-    const text = `BUKTI TRANSAKSI KAS TONGKRONGAN
-ID: ${transaction.id}
-Aliran: ${isIncome ? 'KAS MASUK (+)' : 'KAS KELUAR (-)'}
-Kategori: ${getCategoryName(transaction.category)}
-Pihak Terkait: ${transaction.member_name}
-Nominal: Rp ${formatRupiah(transaction.amount)}
-Metode: ${transaction.method.toUpperCase()}
-Waktu: ${new Date(transaction.created_at).toLocaleString('id-ID')}
-Catatan: ${transaction.notes}`;
+    const padR = (str: string, len: number) => {
+      const s = String(str || '');
+      if (s.length > len) return s.slice(0, len - 1) + '…';
+      return s.padEnd(len, ' ');
+    };
+
+    const padL = (str: string, len: number) => {
+      const s = String(str || '');
+      if (s.length > len) return s.slice(0, len);
+      return s.padStart(len, ' ');
+    };
+
+    let text = `🧾 *RESI BUKTI TRANSAKSI DIGITAL*\n`;
+    text += `*KAS TONGKRONGAN MANDIRI*\n`;
+    text += `\`\`\`\n`;
+    text += `=========================================\n`;
+    text += `${padR('ID Transaksi', 18)}: ${padL(transaction.id, 20)}\n`;
+    text += `${padR('Jenis Mutasi', 18)}: ${padL(isIncome ? 'KAS MASUK (+)' : 'KAS KELUAR (-)', 20)}\n`;
+    text += `${padR('Kategori', 18)}: ${padL(getCategoryName(transaction.category), 20)}\n`;
+    text += `${padR('Nama Anggota', 18)}: ${padL(transaction.member_name, 20)}\n`;
+    text += `${padR('Nominal', 18)}: ${padL(`${isIncome ? '+' : '-'}Rp ${formatRupiah(transaction.amount)}`, 20)}\n`;
+    text += `${padR('Metode', 18)}: ${padL(transaction.method.toUpperCase(), 20)}\n`;
+    text += `${padR('Tanggal & Waktu', 18)}: ${padL(new Date(transaction.created_at).toLocaleString('id-ID'), 20)}\n`;
+    if (transaction.notes) {
+      text += `-----------------------------------------\n`;
+      text += `Catatan: ${transaction.notes}\n`;
+    }
+    text += `=========================================\n`;
+    text += `STATUS: TERCATAT SAH DI BUKU KAS\n`;
+    text += `\`\`\`\n`;
+    text += `_Terverifikasi via Sistem Kas Tongkrongan_`;
 
     navigator.clipboard.writeText(text);
-    alert('Rincian resi berhasil disalin!');
   };
 
   return (

@@ -424,6 +424,18 @@ export function App() {
   // -------------------------------------------------------------
 
   const copyWhatsAppSummary = () => {
+    const padR = (str: string, len: number) => {
+      const s = String(str || '');
+      if (s.length > len) return s.slice(0, len - 1) + '…';
+      return s.padEnd(len, ' ');
+    };
+
+    const padL = (str: string, len: number) => {
+      const s = String(str || '');
+      if (s.length > len) return s.slice(0, len);
+      return s.padStart(len, ' ');
+    };
+
     const nowStr = new Date().toLocaleDateString('id-ID', {
       weekday: 'long',
       day: 'numeric',
@@ -431,45 +443,84 @@ export function App() {
       year: 'numeric',
     });
 
-    let text = `📢 *LAPORAN KEUANGAN REAL-TIME KAS TONGKRONGAN*\n`;
+    let text = `📢 *LAPORAN KAS TONGKRONGAN (REAL-TIME)*\n`;
     text += `📅 Update: ${nowStr}\n`;
     text += `👤 Bendahara: ${state.config.treasurer_name}\n`;
-    text += `━━━━━━━━━━━━━━━━━━━━\n`;
-    text += `💰 *SALDO KAS SAAT INI: Rp ${formatRupiah(summary.saldoKasSaatIni)}*\n`;
-    text += `📥 Total Kas Masuk: Rp ${formatRupiah(summary.totalKasMasuk)}\n`;
-    text += `📤 Total Kas Keluar: Rp ${formatRupiah(summary.totalKasKeluar)}\n`;
-    text += `🤝 Piutang Pinjaman di Anggota: Rp ${formatRupiah(summary.totalHutangBeredar)}\n`;
-    text += `⚠️ Total Denda Tercatat: Rp ${formatRupiah(summary.totalDendaTercatat)}\n`;
-    text += `━━━━━━━━━━━━━━━━━━━━\n\n`;
+    text += `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n`;
 
-    text += `👥 *STATUS ANGGOTA (${state.users.length} Orang):*\n`;
-    state.users.forEach((u, i) => {
+    // 1. Ringkasan Kas Monospace
+    text += `*💰 SALDO & KEUANGAN SAAT INI:*\n`;
+    text += `\`\`\`\n`;
+    text += `=========================================\n`;
+    text += `${padR('Saldo Kas Saat Ini', 24)}: ${padL(`Rp ${formatRupiah(summary.saldoKasSaatIni)}`, 14)}\n`;
+    text += `${padR('Total Kas Masuk', 24)}: ${padL(`Rp ${formatRupiah(summary.totalKasMasuk)}`, 14)}\n`;
+    text += `${padR('Total Kas Keluar', 24)}: ${padL(`Rp ${formatRupiah(summary.totalKasKeluar)}`, 14)}\n`;
+    text += `-----------------------------------------\n`;
+    text += `${padR('Piutang Pinjaman Anggota', 24)}: ${padL(`Rp ${formatRupiah(summary.totalHutangBeredar)}`, 14)}\n`;
+    text += `${padR('Total Denda Tercatat', 24)}: ${padL(`Rp ${formatRupiah(summary.totalDendaTercatat)}`, 14)}\n`;
+    text += `=========================================\n`;
+    text += `\`\`\`\n\n`;
+
+    // 2. Jurnal Mutasi Transaksi Terakhir (Monospace)
+    const recentTx = state.transactions.slice(0, 15);
+    text += `*📋 JURNAL MUTASI TRANSAKSI TERAKHIR:*\n`;
+    text += `\`\`\`\n`;
+    text += `==============================================\n`;
+    text += `TGL    NAMA          KAT       MET     NOMINAL\n`;
+    text += `==============================================\n`;
+
+    if (recentTx.length === 0) {
+      text += `           Belum ada transaksi tercatat       \n`;
+    } else {
+      recentTx.forEach((tx) => {
+        const txDate = new Date(tx.created_at);
+        const dateStr = `${String(txDate.getDate()).padStart(2, '0')}/${String(txDate.getMonth() + 1).padStart(2, '0')}`;
+        const nameStr = padR(tx.member_name || 'Kas', 13);
+        
+        let catShort = tx.category.replace(/_/g, ' ').toUpperCase();
+        if (catShort.length > 9) catShort = catShort.slice(0, 8) + '…';
+        const catStr = padR(catShort, 9);
+        
+        const metStr = padR(tx.method.toUpperCase(), 4);
+        const sign = tx.direction === 'masuk' ? '+' : '-';
+        const amtStr = padL(`${sign}${formatRupiah(tx.amount)}`, 11);
+
+        text += `${dateStr}  ${nameStr} ${catStr} ${metStr} ${amtStr}\n`;
+      });
+    }
+    text += `==============================================\n`;
+    text += `\`\`\`\n\n`;
+
+    // 3. Status Anggota (Monospace)
+    text += `*👥 REKAPITULASI ANGGOTA (${state.users.length} Orang):*\n`;
+    text += `\`\`\`\n`;
+    text += `==============================================\n`;
+    text += `NAMA           TOTAL SETOR  SISA HUTANG  SKOR \n`;
+    text += `==============================================\n`;
+    state.users.forEach((u) => {
       const stats = calculateMemberStats(u, state);
-      text += `${i + 1}. *[${u.avatar_initial}] ${u.name}*\n`;
-      text += `   • Total Masuk: Rp ${formatRupiah(stats.totalMasuk)}\n`;
-      text += `   • Pekan Ini: Rp ${formatRupiah(stats.masukPekanIni)} | Bln: Rp ${formatRupiah(stats.masukBulanIni)}\n`;
-      if (stats.sisaHutang > 0) {
-        text += `   • 🔴 Sisa Hutang: Rp ${formatRupiah(stats.sisaHutang)}\n`;
-      }
-      if (stats.dendaTertunda > 0) {
-        text += `   • ⚡ Denda: Rp ${formatRupiah(stats.dendaTertunda)}\n`;
-      }
-      text += `   • Sisa Kredit: Rp ${formatRupiah(u.credit_limit || 0)} (Maks: Rp ${formatRupiah(stats.plafonKredit)})\n`;
-      text += `   • Kepatuhan: ${stats.skorKepatuhan}% (${stats.labelKepatuhan})\n\n`;
+      const nameCol = padR(u.name, 14);
+      const setorCol = padL(formatRupiah(stats.totalMasuk), 11);
+      const hutangCol = padL(formatRupiah(stats.sisaHutang), 11);
+      const scoreCol = padL(`${stats.skorKepatuhan}%`, 5);
+      text += `${nameCol} ${setorCol}  ${hutangCol}  ${scoreCol}\n`;
     });
+    text += `==============================================\n`;
+    text += `\`\`\`\n\n`;
 
-    text += `━━━━━━━━━━━━━━━━━━━━\n`;
-    text += `💳 Pembayaran iuran/pelunasan dapat ditransfer ke:\n`;
+    // 4. Pembayaran Info & Footer
+    text += `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n`;
+    text += `💳 *Pembayaran iuran/pelunasan dapat ditransfer ke:*\n`;
     if (state.config.treasurer_bank_name) {
-      text += `• ${state.config.treasurer_bank_name}: ${state.config.treasurer_account_number}\n`;
+      text += `• Bank: *${state.config.treasurer_bank_name}* - ${state.config.treasurer_account_number} (a/n ${state.config.treasurer_name})\n`;
     }
     if (state.config.treasurer_ewallet) {
-      text += `• E-Wallet: ${state.config.treasurer_ewallet}\n`;
+      text += `• E-Wallet: *${state.config.treasurer_ewallet}*\n`;
     }
-    text += `_Terima kasih atas kedisiplinan dan transparansi bersama!_`;
+    text += `\n_Laporan transparan dibuat otomatis via Sistem Kas Tongkrongan._`;
 
     navigator.clipboard.writeText(text);
-    showToast('📋 Ringkasan laporan berhasil disalin! Siap dibagikan ke WhatsApp.');
+    showToast('📋 Ringkasan & Jurnal Mutasi (Font Monospace) disalin! Kolom sejajar rapi di WhatsApp.');
   };
 
   const handleResetData = () => {
