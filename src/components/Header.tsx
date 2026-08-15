@@ -1,6 +1,7 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { User, SystemConfig } from '../types';
-import { QrCode, Settings, ShieldCheck, Sparkles, PlusCircle } from 'lucide-react';
+import { QrCode, Settings, ShieldCheck, Sparkles, PlusCircle, Smartphone, Download } from 'lucide-react';
+import { isStandalone } from '../lib/pwa';
 
 interface HeaderProps {
   config: SystemConfig;
@@ -8,6 +9,7 @@ interface HeaderProps {
   onOpenSettings: () => void;
   onOpenQRIS: () => void;
   onOpenAddMember: () => void;
+  onOpenInstallPWA?: () => void;
 }
 
 export const Header: React.FC<HeaderProps> = ({
@@ -16,24 +18,38 @@ export const Header: React.FC<HeaderProps> = ({
   onOpenSettings,
   onOpenQRIS,
   onOpenAddMember,
+  onOpenInstallPWA,
 }) => {
+  const [standalone, setStandalone] = useState(false);
+
+  useEffect(() => {
+    setStandalone(isStandalone());
+  }, []);
+
   return (
     <header className="sticky top-0 z-40 bg-white/95 backdrop-blur-md border-b border-slate-200 shadow-xs">
       <div className="w-full max-w-5xl mx-auto px-4 sm:px-6 h-16 flex items-center justify-between gap-4">
         {/* Brand & App Title */}
         <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-2xl bg-gradient-to-tr from-[#118EEA] to-[#0B63C5] flex items-center justify-center text-white shadow-md shadow-[#118EEA]/20">
-            <span className="font-heading font-extrabold text-lg tracking-tight">K</span>
+          <div className="w-10 h-10 rounded-2xl bg-gradient-to-tr from-[#118EEA] to-[#0B63C5] p-1 flex items-center justify-center text-white shadow-md shadow-[#118EEA]/20">
+            <img src="/favicon.svg" alt="KasTongkrongan" className="w-7 h-7 object-contain" />
           </div>
           <div>
             <div className="flex items-center gap-2">
               <h1 className="text-base font-extrabold text-[#2B2F38] font-heading tracking-tight">
                 Kas Tongkrongan
               </h1>
-              <span className="hidden sm:inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200">
-                <ShieldCheck className="w-3 h-3" />
-                Mode Bendahara
-              </span>
+              {standalone ? (
+                <span className="inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full bg-blue-50 text-[#118EEA] border border-blue-200">
+                  <Smartphone className="w-3 h-3" />
+                  App Mandiri
+                </span>
+              ) : (
+                <span className="hidden sm:inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200">
+                  <ShieldCheck className="w-3 h-3" />
+                  Mode Bendahara
+                </span>
+              )}
             </div>
             <p className="text-[11px] text-[#727986] line-clamp-1">
               {config.treasurer_name} • {totalMembers} Anggota Terdaftar
@@ -43,6 +59,18 @@ export const Header: React.FC<HeaderProps> = ({
 
         {/* Quick Actions for Bendahara */}
         <div className="flex items-center gap-2">
+          {onOpenInstallPWA && !standalone && (
+            <button
+              type="button"
+              onClick={onOpenInstallPWA}
+              className="inline-flex items-center gap-1 px-2.5 py-1.5 bg-gradient-to-r from-blue-500 to-[#118EEA] hover:from-blue-600 hover:to-[#0A6CBD] text-white rounded-xl text-xs font-bold shadow-xs active:scale-95 transition-all"
+              title="Install KasTongkrongan ke Layar Utama"
+            >
+              <Download className="w-3.5 h-3.5" />
+              <span className="hidden xs:inline">Install App</span>
+            </button>
+          )}
+
           <button
             type="button"
             onClick={onOpenAddMember}
@@ -76,3 +104,4 @@ export const Header: React.FC<HeaderProps> = ({
     </header>
   );
 };
+

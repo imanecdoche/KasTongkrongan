@@ -1,0 +1,63 @@
+{
+  "name": "KasTongkrongan - Dompet Kas & Pinjaman Komunal",
+  "short_name": "KasTongkrongan",
+  "description": "Aplikasi manajemen kas tongkrongan komunal terpusat & offline-ready untuk bendahara dan anggota.",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "display_override": ["standalone", "minimal-ui", "browser"],
+  "orientation": "portrait-primary",
+  "background_color": "#F5F6F8",
+  "theme_color": "#118EEA",
+  "lang": "id",
+  "dir": "ltr",
+  "categories": ["finance", "productivity", "utilities"],
+  "icons": [
+    {
+      "src": "/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/maskable-icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    },
+    {
+      "src": "/favicon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "Catat Kas Masuk",
+      "short_name": "Kas Masuk",
+      "description": "Catat pembayaran iuran, pelunasan hutang, atau denda",
+      "url": "/?action=kas-masuk",
+      "icons": [{ "src": "/icon-192.png", "sizes": "192x192" }]
+    },
+    {
+      "name": "Catat Kas Keluar",
+      "short_name": "Kas Keluar",
+      "description": "Catat pengeluaran kas atau pinjaman talangan",
+      "url": "/?action=kas-keluar",
+      "icons": [{ "src": "/icon-192.png", "sizes": "192x192" }]
+    },
+    {
+      "name": "Daftar Anggota & Limit",
+      "short_name": "Anggota",
+      "description": "Kelola profil dan limit pinjaman tongkrongan",
+      "url": "/?tab=anggota",
+      "icons": [{ "src": "/icon-192.png", "sizes": "192x192" }]
+    }
+  ]
+}

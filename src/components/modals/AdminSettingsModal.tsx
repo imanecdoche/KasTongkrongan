@@ -1,7 +1,8 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { SystemConfig } from '../../types';
 import { formatRupiah, parseRupiahInput } from '../../lib/storage';
-import { X, Settings, RefreshCw, Save, ShieldAlert, Check } from 'lucide-react';
+import { X, Settings, RefreshCw, Save, ShieldAlert, Check, Smartphone, Download, CheckCircle2 } from 'lucide-react';
+import { isStandalone } from '../../lib/pwa';
 
 interface AdminSettingsModalProps {
   isOpen: boolean;
@@ -9,6 +10,7 @@ interface AdminSettingsModalProps {
   config: SystemConfig;
   onSaveConfig: (newConfig: SystemConfig) => void;
   onResetData: () => void;
+  onOpenInstallPWA?: () => void;
 }
 
 export const AdminSettingsModal: React.FC<AdminSettingsModalProps> = ({
@@ -17,6 +19,7 @@ export const AdminSettingsModal: React.FC<AdminSettingsModalProps> = ({
   config,
   onSaveConfig,
   onResetData,
+  onOpenInstallPWA,
 }) => {
   if (!isOpen) return null;
 
@@ -27,6 +30,11 @@ export const AdminSettingsModal: React.FC<AdminSettingsModalProps> = ({
   const [ewallet, setEwallet] = useState(config.treasurer_ewallet);
   const [weeklyTargetStr, setWeeklyTargetStr] = useState(formatRupiah(config.weekly_target));
   const [defaultCreditStr, setDefaultCreditStr] = useState(formatRupiah(config.default_credit_limit || 20000));
+  const [standalone, setStandalone] = useState(false);
+
+  useEffect(() => {
+    setStandalone(isStandalone());
+  }, []);
 
   const handleSave = (e: React.FormEvent) => {
     e.preventDefault();
@@ -68,6 +76,34 @@ export const AdminSettingsModal: React.FC<AdminSettingsModalProps> = ({
 
         {/* Form */}
         <form onSubmit={handleSave} className="p-6 space-y-4">
+          {/* PWA / Standalone Info */}
+          <div className="p-3 bg-blue-50/70 border border-blue-100 rounded-xl flex items-center justify-between">
+            <div className="flex items-center gap-2.5">
+              <div className="w-7 h-7 rounded-lg bg-[#118EEA] text-white flex items-center justify-center">
+                <Smartphone className="w-4 h-4" />
+              </div>
+              <div>
+                <span className="text-xs font-bold text-slate-800 block">Status Aplikasi PWA</span>
+                <span className="text-[11px] text-slate-600">
+                  {standalone ? 'Mode Mandiri Terpasang (Standalone)' : 'Berjalan di Browser Web'}
+                </span>
+              </div>
+            </div>
+            {!standalone && onOpenInstallPWA && (
+              <button
+                type="button"
+                onClick={() => {
+                  onClose();
+                  onOpenInstallPWA();
+                }}
+                className="px-2.5 py-1 bg-[#118EEA] hover:bg-[#0B63C5] text-white rounded-lg text-[11px] font-bold flex items-center gap-1 shadow-xs transition-colors"
+              >
+                <Download className="w-3 h-3" />
+                <span>Pasang</span>
+              </button>
+            )}
+          </div>
+
           <div className="space-y-1">
             <label className="text-xs font-bold text-slate-700">Nama Bendahara / Pengelola</label>
             <input

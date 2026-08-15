@@ -31,6 +31,8 @@ import { ManageCreditModal } from './components/modals/ManageCreditModal';
 import { ReceiptModal } from './components/modals/ReceiptModal';
 import { AdminSettingsModal } from './components/modals/AdminSettingsModal';
 import { QRISViewerModal } from './components/modals/QRISViewerModal';
+import { PWAInstallModal } from './components/modals/PWAInstallModal';
+import { PWAInstallBanner } from './components/PWAInstallBanner';
 
 import {
   ArrowDownLeft,
@@ -57,6 +59,7 @@ export function App() {
   const [selectedReceiptTx, setSelectedReceiptTx] = useState<Transaction | null>(null);
   const [isAdminSettingsOpen, setIsAdminSettingsOpen] = useState(false);
   const [isQRISOpen, setIsQRISOpen] = useState(false);
+  const [isInstallModalOpen, setIsInstallModalOpen] = useState(false);
 
   // Preselection for modals
   const [preSelectedMemberId, setPreSelectedMemberId] = useState<string | undefined>(undefined);
@@ -71,6 +74,25 @@ export function App() {
       setToastMessage((current) => (current === msg ? null : current));
     }, 3000);
   };
+
+  // Handle URL shortcut actions (PWA shortcuts like ?action=kas-masuk or ?tab=anggota)
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const params = new URLSearchParams(window.location.search);
+      const action = params.get('action');
+      const tab = params.get('tab') as NavigationTab | null;
+
+      if (action === 'kas-masuk') {
+        setIsKasMasukOpen(true);
+      } else if (action === 'kas-keluar') {
+        setIsKasKeluarOpen(true);
+      }
+
+      if (tab && ['beranda', 'anggota', 'pinjaman', 'mutasi'].includes(tab)) {
+        setActiveTab(tab);
+      }
+    }
+  }, []);
 
   // Sync state changes with persistence
   const updateStateAndSave = (updater: (prev: AppState) => AppState) => {
@@ -420,12 +442,19 @@ export function App() {
         </div>
       )}
 
+      {/* PWA In-App Install Banner */}
+      <PWAInstallBanner
+        onOpenModal={() => setIsInstallModalOpen(true)}
+        onInstalled={() => showToast('KasTongkrongan berhasil dipasang ke Layar Utama!')}
+      />
+
       {/* Header */}
       <Header
         config={state.config}
         totalMembers={state.users.length}
         onOpenSettings={() => setIsAdminSettingsOpen(true)}
         onOpenQRIS={() => setIsQRISOpen(true)}
+        onOpenInstallPWA={() => setIsInstallModalOpen(true)}
         onOpenAddMember={() => {
           setEditingMember(null);
           setIsMemberFormOpen(true);
@@ -725,6 +754,7 @@ export function App() {
         isOpen={isAdminSettingsOpen}
         onClose={() => setIsAdminSettingsOpen(false)}
         config={state.config}
+        onOpenInstallPWA={() => setIsInstallModalOpen(true)}
         onSaveConfig={(newConfig) => {
           updateStateAndSave((prev) => ({ ...prev, config: newConfig }));
         }}
@@ -736,6 +766,13 @@ export function App() {
         isOpen={isQRISOpen}
         onClose={() => setIsQRISOpen(false)}
         treasurerName={state.config.treasurer_name}
+      />
+
+      {/* 8. Modal Install PWA & Offline Guide */}
+      <PWAInstallModal
+        isOpen={isInstallModalOpen}
+        onClose={() => setIsInstallModalOpen(false)}
+        onSuccess={() => showToast('Aplikasi KasTongkrongan berhasil dipasang!')}
       />
     </div>
   );

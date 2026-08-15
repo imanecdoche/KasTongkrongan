@@ -1,6 +1,6 @@
 {
   "name": "KasTongkrongan",
-  "description": "Aplikasi manajemen kas tongkrongan terpusat untuk bendahara dengan pencatatan kas masuk/keluar, manajemen anggota, limit kredit pinjaman, denda, dan statistik kepatuhan realtime.",
+  "description": "Aplikasi manajemen kas tongkrongan terpusat & PWA (Progressive Web App) offline-ready untuk bendahara dengan pencatatan kas masuk/keluar, manajemen anggota, limit kredit pinjaman, dan denda otomatis.",
   "requestFramePermissions": [],
   "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
 }
