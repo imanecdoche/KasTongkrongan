@@ -40,8 +40,8 @@ import {
   Pie,
   Cell,
 } from 'recharts';
-import { toPng } from 'html-to-image';
 import { jsPDF } from 'jspdf';
+import { captureElementToPng } from '../lib/exportUtils';
 
 interface ReportModuleProps {
   state: AppState;
@@ -413,12 +413,9 @@ export const ReportModule: React.FC<ReportModuleProps> = ({ state, onShowToast }
       // Small delay to ensure DOM is settled
       await new Promise((res) => setTimeout(res, 250));
 
-      const dataUrl = await toPng(reportRef.current, {
-        cacheBust: true,
+      const dataUrl = await captureElementToPng(reportRef.current, {
         backgroundColor: '#FFFFFF',
-        pixelRatio: 2,
-        skipFonts: true,
-        fontEmbedCSS: '',
+        scale: 2,
       });
 
       const link = document.createElement('a');
@@ -447,12 +444,9 @@ export const ReportModule: React.FC<ReportModuleProps> = ({ state, onShowToast }
 
       await new Promise((res) => setTimeout(res, 250));
 
-      const dataUrl = await toPng(reportRef.current, {
-        cacheBust: true,
+      const dataUrl = await captureElementToPng(reportRef.current, {
         backgroundColor: '#FFFFFF',
-        pixelRatio: 2,
-        skipFonts: true,
-        fontEmbedCSS: '',
+        scale: 2,
       });
 
       // Load image to determine aspect ratio & dimensions

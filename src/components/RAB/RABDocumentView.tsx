@@ -1,7 +1,7 @@
 import React, { useRef, useState, useEffect } from 'react';
 import { RABPlan } from '../../types';
 import { calculateRABSummary, formatAmountK } from '../../lib/storage';
-import { toPng } from 'html-to-image';
+import html2canvas from 'html2canvas';
 import { jsPDF } from 'jspdf';
 
 interface RABDocumentViewProps {
@@ -129,6 +129,8 @@ const renderAsciiProgressBar = (percent: number, totalSlots = 14): string => {
   return `[${'='.repeat(filledCount)}${'░'.repeat(emptyCount)}] ${clamped}%`;
 };
 
+const SCALE_PRESETS = [0.6, 0.8, 1.0, 1.2, 1.4];
+
 export const RABDocumentView: React.FC<RABDocumentViewProps> = ({
   rab,
   treasurerName = 'BENDAHARA TONGKRONGAN',
@@ -140,6 +142,7 @@ export const RABDocumentView: React.FC<RABDocumentViewProps> = ({
 }) => {
   const docRef = useRef<HTMLDivElement>(null);
   const [selectedTheme, setSelectedTheme] = useState<TUITheme>('matrix');
+  const [currentScale, setCurrentScale] = useState<number>(1.0);
   const [isExportingPNG, setIsExportingPNG] = useState(false);
   const [isExportingPDF, setIsExportingPDF] = useState(false);
   const [showRawAscii, setShowRawAscii] = useState(false);
@@ -147,7 +150,29 @@ export const RABDocumentView: React.FC<RABDocumentViewProps> = ({
   const summary = calculateRABSummary(rab);
   const theme = THEMES[selectedTheme];
 
-  // Global Keyboard Hotkeys (F1, F2, F3, F4, ESC)
+  // Scale adjustment handlers
+  const handleZoomIn = () => {
+    setCurrentScale((prev) => {
+      const next = Math.min(2.0, Math.round((prev + 0.1) * 10) / 10);
+      onShowToast(`🔍 Scale: ${Math.round(next * 100)}%`);
+      return next;
+    });
+  };
+
+  const handleZoomOut = () => {
+    setCurrentScale((prev) => {
+      const next = Math.max(0.4, Math.round((prev - 0.1) * 10) / 10);
+      onShowToast(`🔍 Scale: ${Math.round(next * 100)}%`);
+      return next;
+    });
+  };
+
+  const handleSetScale = (scale: number) => {
+    setCurrentScale(scale);
+    onShowToast(`🔍 Scale diatur ke ${Math.round(scale * 100)}%`);
+  };
+
+  // Global Keyboard Hotkeys (F1, F2, F3, F4, ESC, +, -, 0)
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'F1') {
@@ -170,12 +195,11 @@ export const RABDocumentView: React.FC<RABDocumentViewProps> = ({
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [rab, selectedTheme, summary]);
+  }, [rab, selectedTheme, summary, currentScale]);
 
   // Full Raw Monospace ASCII generator for clipboard & WhatsApp
   const generateAsciiDocumentText = (): string => {
     const divider = '─'.repeat(72);
-    const doubleDivider = '═'.repeat(72);
     let text = `┌${divider}┐\n`;
     text += `│ kas-tongkrongan@cli: ~/rab/${rab.id}                        [X][^][-] │\n`;
     text += `├${divider}┤\n`;
@@ -264,82 +288,83 @@ export const RABDocumentView: React.FC<RABDocumentViewProps> = ({
     onShowToast('📋 ASCII Grid TUI RAB disalin ke clipboard!');
   };
 
+  // Export as PNG adhering to active currentScale
   const handleExportPNG = async () => {
-    if (!docRef.current) return;
+    const element = document.getElementById('cli-document-render') || docRef.current;
+    if (!element) return;
+
     try {
       setIsExportingPNG(true);
-      onShowToast('⏳ Merender Flat TUI Terminal ke file PNG...');
+      const scalePct = Math.round(currentScale * 100);
+      onShowToast(`⏳ Merender canvas TUI RAB pada skala ${scalePct}%...`);
       await new Promise((r) => setTimeout(r, 200));
 
-      const dataUrl = await toPng(docRef.current, {
-        cacheBust: true,
+      const dpr = window.devicePixelRatio || 1;
+      // Render canvas sesuai dimensi visual dan scale aktif saat ini
+      const canvas = await html2canvas(element, {
         backgroundColor: theme.bg,
-        pixelRatio: 2,
+        scale: dpr * currentScale, // Mengikuti scale aktif
+        useCORS: true,
+        logging: false,
       });
 
       const cleanName = rab.name.replace(/[^a-zA-Z0-9_-]/g, '_');
-      const filename = `TUI_RAB_${cleanName}_${new Date().toISOString().slice(0, 10)}.png`;
+      const filename = `RAB_${cleanName}_scale_${scalePct}pct.png`;
+
       const link = document.createElement('a');
-      link.href = dataUrl;
       link.download = filename;
+      link.href = canvas.toDataURL('image/png');
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
 
-      onShowToast(`✅ TUI RAB berhasil diekspor ke ${filename}`);
+      onShowToast(`> [OK] Dokumen diekspor dengan skala ${scalePct}%`);
     } catch (err) {
-      console.error(err);
+      console.error('PNG export failed:', err);
       onShowToast('❌ Gagal mengekspor PNG.');
     } finally {
       setIsExportingPNG(false);
     }
   };
 
+  // Export as PDF adhering to active currentScale
   const handleExportPDF = async () => {
-    if (!docRef.current) return;
+    const element = document.getElementById('cli-document-render') || docRef.current;
+    if (!element) return;
+
     try {
       setIsExportingPDF(true);
-      onShowToast('⏳ Memproses PDF TUI CLI...');
+      const scalePct = Math.round(currentScale * 100);
+      onShowToast(`⏳ Memproses PDF TUI CLI skala ${scalePct}%...`);
       await new Promise((r) => setTimeout(r, 200));
 
-      const dataUrl = await toPng(docRef.current, {
-        cacheBust: true,
+      const canvas = await html2canvas(element, {
         backgroundColor: theme.bg,
-        pixelRatio: 2,
+        scale: 2 * currentScale, // Kerapatan render sesuai scale aktif
+        useCORS: true,
+        logging: false,
       });
 
+      const imgData = canvas.toDataURL('image/png');
+      const imgWidth = canvas.width;
+      const imgHeight = canvas.height;
+
+      // Inisialisasi jsPDF dengan ukuran custom sesuai hasil scale visual
       const pdf = new jsPDF({
-        orientation: 'portrait',
-        unit: 'mm',
-        format: 'a4',
+        orientation: imgWidth > imgHeight ? 'landscape' : 'portrait',
+        unit: 'px',
+        format: [imgWidth, imgHeight],
       });
 
-      const pdfWidth = pdf.internal.pageSize.getWidth();
-      const pdfHeight = pdf.internal.pageSize.getHeight();
-      const margin = 8;
-      const contentWidth = pdfWidth - margin * 2;
-
-      const imgProps = pdf.getImageProperties(dataUrl);
-      const imgHeight = (imgProps.height * contentWidth) / imgProps.width;
-
-      if (imgHeight > pdfHeight - margin * 2) {
-        const scaleFactor = (pdfHeight - margin * 2) / imgHeight;
-        const scaledWidth = contentWidth * scaleFactor;
-        const scaledHeight = imgHeight * scaleFactor;
-        const xOffset = (pdfWidth - scaledWidth) / 2;
-        pdf.addImage(dataUrl, 'PNG', xOffset, margin, scaledWidth, scaledHeight);
-      } else {
-        pdf.addImage(dataUrl, 'PNG', margin, margin, contentWidth, imgHeight);
-      }
-
+      pdf.addImage(imgData, 'PNG', 0, 0, imgWidth, imgHeight);
       const cleanName = rab.name.replace(/[^a-zA-Z0-9_-]/g, '_');
-      const filename = `TUI_RAB_${cleanName}_${new Date().toISOString().slice(0, 10)}.pdf`;
+      const filename = `RAB_${cleanName}_scale_${scalePct}pct.pdf`;
       pdf.save(filename);
 
-      onShowToast(`✅ Dokumen PDF TUI RAB berhasil diunduh: ${filename}`);
+      onShowToast(`> [OK] Dokumen diekspor dengan skala ${scalePct}%`);
     } catch (err) {
-      console.error(err);
-      onShowToast('❌ Gagal mengekspor PDF.');
+      console.error('PDF export failed:', err);
+      onShowToast('❌ Gagal memproses PDF.');
     } finally {
       setIsExportingPDF(false);
     }
@@ -353,7 +378,7 @@ export const RABDocumentView: React.FC<RABDocumentViewProps> = ({
         borderRadius: 0,
       }}
     >
-      {/* Top Retro Mode Bar (Theme Selection & Raw View Switch) */}
+      {/* Top Retro Mode Bar (Theme, Zoom Scale Controls & Raw View Switch) */}
       <div
         className="p-2.5 mb-3 flex flex-wrap items-center justify-between gap-2 text-xs border"
         style={{
@@ -363,7 +388,7 @@ export const RABDocumentView: React.FC<RABDocumentViewProps> = ({
           borderRadius: 0,
         }}
       >
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 flex-wrap">
           <span className="font-bold uppercase tracking-wider">
             [MODE: RETRO-TUI GUI]
           </span>
@@ -373,6 +398,61 @@ export const RABDocumentView: React.FC<RABDocumentViewProps> = ({
           </span>
         </div>
 
+        {/* Zoom Scale Controller */}
+        <div className="flex items-center gap-1 flex-wrap text-[11px]">
+          <span style={{ color: theme.dim }}>SCALE:</span>
+          <button
+            type="button"
+            onClick={handleZoomOut}
+            className="px-1.5 py-0.5 font-bold border transition-none"
+            style={{
+              backgroundColor: 'transparent',
+              color: theme.text,
+              borderColor: theme.border,
+              borderRadius: 0,
+            }}
+            title="Zoom Out (-10%)"
+          >
+            [-]
+          </button>
+
+          {SCALE_PRESETS.map((sc) => {
+            const isSel = Math.abs(currentScale - sc) < 0.05;
+            return (
+              <button
+                key={sc}
+                type="button"
+                onClick={() => handleSetScale(sc)}
+                className="px-1.5 py-0.5 font-bold border transition-none text-[10px]"
+                style={{
+                  backgroundColor: isSel ? theme.text : 'transparent',
+                  color: isSel ? theme.bg : theme.text,
+                  borderColor: theme.border,
+                  borderRadius: 0,
+                }}
+              >
+                {Math.round(sc * 100)}%
+              </button>
+            );
+          })}
+
+          <button
+            type="button"
+            onClick={handleZoomIn}
+            className="px-1.5 py-0.5 font-bold border transition-none"
+            style={{
+              backgroundColor: 'transparent',
+              color: theme.text,
+              borderColor: theme.border,
+              borderRadius: 0,
+            }}
+            title="Zoom In (+10%)"
+          >
+            [+]
+          </button>
+        </div>
+
+        {/* Themes and Other Action Buttons */}
         <div className="flex items-center gap-1.5 flex-wrap text-[11px]">
           <span style={{ color: theme.dim }}>THEME:</span>
           {(Object.keys(THEMES) as TUITheme[]).map((tKey) => {
@@ -382,7 +462,7 @@ export const RABDocumentView: React.FC<RABDocumentViewProps> = ({
                 key={tKey}
                 type="button"
                 onClick={() => setSelectedTheme(tKey)}
-                className="px-2 py-0.5 font-bold border transition-none uppercase"
+                className="px-1.5 py-0.5 font-bold border transition-none uppercase text-[10px]"
                 style={{
                   backgroundColor: isSel ? theme.text : 'transparent',
                   color: isSel ? theme.bg : theme.text,
@@ -476,542 +556,556 @@ export const RABDocumentView: React.FC<RABDocumentViewProps> = ({
       {/* ========================================================================= */}
       {/* STRICT GUI CLI / TUI DOCUMENT CANVAS (NO BORDER-RADIUS, NO SHADOW, NO SANS) */}
       {/* ========================================================================= */}
-      <div
-        ref={docRef}
-        id="strict-tui-rab-canvas"
-        className="w-full border-2 overflow-x-auto text-xs leading-relaxed transition-none"
-        style={{
-          backgroundColor: theme.bg,
-          borderColor: theme.border,
-          color: theme.text,
-          borderRadius: 0,
-          boxShadow: 'none',
-        }}
-      >
-        {/* 1. Terminal Window Header */}
+      <div className="w-full overflow-x-auto pb-4">
         <div
-          className="px-3 py-1.5 border-b flex items-center justify-between font-bold text-xs"
           style={{
-            backgroundColor: theme.headerBg,
-            borderColor: theme.border,
-            borderRadius: 0,
+            transform: `scale(${currentScale})`,
+            transformOrigin: 'top left',
+            width: currentScale <= 1 ? `${(100 / currentScale).toFixed(2)}%` : '100%',
+            minWidth: currentScale > 1 ? `${Math.round(currentScale * 100)}%` : '100%',
           }}
         >
-          <div className="flex items-center gap-1 truncate">
-            <span>┌─[</span>
-            <span style={{ color: theme.highlightText }}>
-              kas-tongkrongan@cli: ~/rab/{rab.id}
-            </span>
-            <span>]</span>
-          </div>
-
-          <div className="flex items-center gap-1 font-bold shrink-0">
-            <span style={{ color: theme.dim }}>──────────────────</span>
-            <span className="cursor-pointer" onClick={onBack} title="Close">[X]</span>
-            <span className="cursor-pointer" onClick={() => window.scrollTo(0, 0)} title="Maximize">[^]</span>
-            <span className="cursor-pointer" title="Minimize">[-]</span>
-            <span>─┐</span>
-          </div>
-        </div>
-
-        {/* 2. Status Bar Prompt */}
-        <div
-          className="px-3 py-1.5 border-b flex flex-wrap items-center justify-between gap-2 text-xs font-bold"
-          style={{
-            borderColor: theme.dim,
-            backgroundColor: theme.bg,
-            borderRadius: 0,
-          }}
-        >
-          <div className="flex items-center gap-2 flex-wrap">
-            <span style={{ color: theme.bright }}>&gt; TARGET:</span>
-            <span style={{ color: theme.highlightText }} className="uppercase font-bold">
-              {rab.name}
-            </span>
-            <span style={{ color: theme.dim }}>|</span>
-            <span style={{ color: theme.bright }}>PJ:</span>
-            <span style={{ color: theme.accent }}>{rab.pic_name.toUpperCase()}</span>
-            <span style={{ color: theme.dim }}>|</span>
-            <span style={{ color: theme.bright }}>STATUS:</span>
-            <span
-              style={{
-                color:
-                  rab.status === 'dialokasikan'
-                    ? '#4ade80'
-                    : rab.status === 'selesai'
-                    ? '#38bdf8'
-                    : '#fbbf24',
-              }}
-            >
-              [{rab.status.toUpperCase()}]
-            </span>
-          </div>
-
-          <div className="text-[11px]" style={{ color: theme.dim }}>
-            WAKTU: {rab.event_date || '-'} | VENUE: {rab.location || '-'}
-          </div>
-        </div>
-
-        <div className="p-3 sm:p-4 space-y-3.5">
-          {/* 3. TUI Stat Metric Panels (Strict ASCII Boxes) */}
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-2.5">
-            {/* Box 1: Total Estimasi */}
+          <div
+            ref={docRef}
+            id="cli-document-render"
+            className="w-full border-2 overflow-x-auto text-xs leading-relaxed transition-none"
+            style={{
+              backgroundColor: theme.bg,
+              borderColor: theme.border,
+              color: theme.text,
+              borderRadius: 0,
+              boxShadow: 'none',
+            }}
+          >
+            {/* 1. Terminal Window Header */}
             <div
-              className="border p-2.5 space-y-1"
+              className="px-3 py-1.5 border-b flex items-center justify-between font-bold text-xs"
               style={{
-                borderColor: theme.border,
                 backgroundColor: theme.headerBg,
+                borderColor: theme.border,
                 borderRadius: 0,
               }}
             >
-              <div className="text-[11px] font-bold" style={{ color: theme.bright }}>
-                ┌─[ TOTAL ESTIMASI ]───────────────────┐
-              </div>
-              <div className="text-base sm:text-lg font-black" style={{ color: theme.highlightText }}>
-                Rp {summary.totalBudget.toLocaleString('id-ID')}
-              </div>
-              <div className="text-xs font-bold" style={{ color: theme.accent }}>
-                {renderAsciiProgressBar(summary.allocationPercentage, 10)}
-              </div>
-              <div className="text-[10px] text-right font-mono" style={{ color: theme.dim }}>
-                └──────────────────────────────────────┘
-              </div>
-            </div>
-
-            {/* Box 2: Dana Teralokasi */}
-            <div
-              className="border p-2.5 space-y-1"
-              style={{
-                borderColor: theme.border,
-                backgroundColor: theme.headerBg,
-                borderRadius: 0,
-              }}
-            >
-              <div className="text-[11px] font-bold" style={{ color: theme.bright }}>
-                ┌─[ DANA TERALOKASI ]──────────────────┐
-              </div>
-              <div className="text-base sm:text-lg font-black" style={{ color: theme.bright }}>
-                Rp {summary.allocatedAmount.toLocaleString('id-ID')}
-              </div>
-              <div className="text-xs font-bold" style={{ color: theme.text }}>
-                Terpenuhi: {rab.items.length} Items ({formatAmountK(summary.allocatedAmount)})
-              </div>
-              <div className="text-[10px] text-right font-mono" style={{ color: theme.dim }}>
-                └──────────────────────────────────────┘
-              </div>
-            </div>
-
-            {/* Box 3: Kekurangan Biaya */}
-            <div
-              className="border p-2.5 space-y-1"
-              style={{
-                borderColor: theme.border,
-                backgroundColor: theme.headerBg,
-                borderRadius: 0,
-              }}
-            >
-              <div className="text-[11px] font-bold" style={{ color: theme.bright }}>
-                ┌─[ KEKURANGAN BIAYA ]─────────────────┐
-              </div>
-              <div
-                className="text-base sm:text-lg font-black"
-                style={{ color: summary.remainingNeeded > 0 ? theme.wajibText : theme.bright }}
-              >
-                Rp {summary.remainingNeeded.toLocaleString('id-ID')}
-              </div>
-              <div className="text-xs font-bold">
-                Status:{' '}
-                <span
-                  style={{
-                    color: summary.remainingNeeded === 0 ? theme.bright : theme.wajibText,
-                  }}
-                >
-                  [{summary.remainingNeeded === 0 ? 'LUNAS / TERCUKUPI' : 'DEFICIT'}]
+              <div className="flex items-center gap-1 truncate">
+                <span>┌─[</span>
+                <span style={{ color: theme.highlightText }}>
+                  kas-tongkrongan@cli: ~/rab/{rab.id}
                 </span>
+                <span style={{ color: theme.accent }}>
+                  (scale: {Math.round(currentScale * 100)}%)
+                </span>
+                <span>]</span>
               </div>
-              <div className="text-[10px] text-right font-mono" style={{ color: theme.dim }}>
-                └──────────────────────────────────────┘
+
+              <div className="flex items-center gap-1 font-bold shrink-0">
+                <span style={{ color: theme.dim }}>──────────────────</span>
+                <span className="cursor-pointer" onClick={onBack} title="Close">[X]</span>
+                <span className="cursor-pointer" onClick={() => window.scrollTo(0, 0)} title="Maximize">[^]</span>
+                <span className="cursor-pointer" title="Minimize">[-]</span>
+                <span>─┐</span>
               </div>
             </div>
-          </div>
 
-          {/* 4. Strict ASCII Grid Table */}
-          <div
-            className="border overflow-x-auto"
-            style={{
-              borderColor: theme.border,
-              borderRadius: 0,
-            }}
-          >
-            <table
-              className="w-full text-left text-xs border-collapse table-fixed"
-              style={{
-                borderColor: theme.border,
-                borderRadius: 0,
-              }}
-            >
-              <thead>
-                <tr
-                  className="font-bold border-b"
-                  style={{
-                    backgroundColor: theme.tableHeadBg,
-                    color: theme.tableHeadText,
-                    borderColor: theme.border,
-                  }}
-                >
-                  <th className="py-2 px-2.5 w-[7%] text-center border-r" style={{ borderColor: theme.border }}>
-                    NO
-                  </th>
-                  <th className="py-2 px-3 w-[36%] border-r" style={{ borderColor: theme.border }}>
-                    NAMA LOGISTIK / JASA
-                  </th>
-                  <th className="py-2 px-2.5 w-[14%] text-center border-r" style={{ borderColor: theme.border }}>
-                    QTY/SAT
-                  </th>
-                  <th className="py-2 px-3 w-[15%] text-right border-r" style={{ borderColor: theme.border }}>
-                    HARGA/SAT
-                  </th>
-                  <th className="py-2 px-3 w-[16%] text-right border-r" style={{ borderColor: theme.border }}>
-                    SUBTOTAL
-                  </th>
-                  <th className="py-2 px-2 w-[12%] text-center">
-                    PRIO
-                  </th>
-                </tr>
-              </thead>
-              <tbody className="text-xs">
-                {rab.items.length === 0 ? (
-                  <tr>
-                    <td
-                      colSpan={6}
-                      className="py-6 text-center italic"
-                      style={{ color: theme.dim }}
-                    >
-                      // NULL: Belum ada rincian anggaran dalam dokumen ini.
-                    </td>
-                  </tr>
-                ) : (
-                  rab.items.map((item, idx) => {
-                    let prioBadge = '[WAJ]';
-                    let prioColor = theme.wajibText;
-
-                    if (item.priority === 'sekunder') {
-                      prioBadge = '[SEK]';
-                      prioColor = theme.sekText;
-                    } else if (item.priority === 'opsional') {
-                      prioBadge = '[OPS]';
-                      prioColor = theme.opsText;
-                    } else if (item.priority === 'cadangan') {
-                      prioBadge = '[CAD]';
-                      prioColor = theme.cadText;
-                    }
-
-                    return (
-                      <tr
-                        key={item.id}
-                        className="border-b transition-none hover:bg-white/5"
-                        style={{ borderColor: theme.dim }}
-                      >
-                        {/* NO */}
-                        <td
-                          className="py-1.5 px-2.5 text-center font-bold border-r"
-                          style={{ borderColor: theme.dim, color: theme.dim }}
-                        >
-                          {String(idx + 1).padStart(2, '0')}
-                        </td>
-
-                        {/* NAMA LOGISTIK */}
-                        <td
-                          className="py-1.5 px-3 font-bold border-r truncate"
-                          style={{ borderColor: theme.dim }}
-                          title={item.name}
-                        >
-                          <span style={{ color: theme.highlightText }}>{item.name}</span>
-                          {item.notes && (
-                            <span className="block text-[10px] font-normal" style={{ color: theme.dim }}>
-                              // {item.notes}
-                            </span>
-                          )}
-                        </td>
-
-                        {/* QTY/SAT */}
-                        <td
-                          className="py-1.5 px-2.5 text-center border-r whitespace-nowrap"
-                          style={{ borderColor: theme.dim }}
-                        >
-                          <span style={{ color: theme.accent }} className="font-bold">
-                            {item.qty}
-                          </span>{' '}
-                          <span style={{ color: theme.dim }}>{item.unit}</span>
-                        </td>
-
-                        {/* HARGA/SAT */}
-                        <td
-                          className="py-1.5 px-3 text-right border-r whitespace-nowrap"
-                          style={{ borderColor: theme.dim, color: theme.dim }}
-                        >
-                          {item.unit_price.toLocaleString('id-ID')}
-                        </td>
-
-                        {/* SUBTOTAL */}
-                        <td
-                          className="py-1.5 px-3 text-right font-black border-r whitespace-nowrap"
-                          style={{ borderColor: theme.dim, color: theme.highlightText }}
-                        >
-                          {item.subtotal.toLocaleString('id-ID')}
-                        </td>
-
-                        {/* PRIORITY TAG */}
-                        <td className="py-1.5 px-2 text-center whitespace-nowrap font-bold">
-                          <span style={{ color: prioColor }}>{prioBadge}</span>
-                        </td>
-                      </tr>
-                    );
-                  })
-                )}
-              </tbody>
-              <tfoot>
-                <tr
-                  className="font-bold border-t-2"
-                  style={{
-                    backgroundColor: theme.headerBg,
-                    borderColor: theme.border,
-                  }}
-                >
-                  <td
-                    colSpan={4}
-                    className="py-2 px-3 text-right border-r uppercase"
-                    style={{ borderColor: theme.border, color: theme.bright }}
-                  >
-                    TOTAL BUDGET ESTIMATION :
-                  </td>
-                  <td
-                    className="py-2 px-3 text-right font-black text-sm border-r"
-                    style={{ borderColor: theme.border, color: theme.highlightText }}
-                  >
-                    Rp {summary.totalBudget.toLocaleString('id-ID')}
-                  </td>
-                  <td
-                    className="py-2 px-2 text-center text-[10px]"
-                    style={{ color: theme.dim }}
-                  >
-                    {rab.items.length} ITM
-                  </td>
-                </tr>
-              </tfoot>
-            </table>
-          </div>
-
-          {/* 5. Priority Matrix Summary */}
-          <div
-            className="p-2 border text-xs flex flex-wrap items-center justify-between gap-2 font-bold"
-            style={{
-              borderColor: theme.border,
-              backgroundColor: theme.headerBg,
-              borderRadius: 0,
-            }}
-          >
-            <div className="flex items-center gap-3 flex-wrap">
-              <span style={{ color: theme.bright }}>[PRIORITY MATRIX]:</span>
-              <span style={{ color: theme.wajibText }}>
-                [1] WAJIB: {formatAmountK(summary.priorityTotals.wajib)} ({summary.priorityCounts.wajib} itm)
-              </span>
-              <span style={{ color: theme.dim }}>|</span>
-              <span style={{ color: theme.sekText }}>
-                [2] SEKUNDER: {formatAmountK(summary.priorityTotals.sekunder)} ({summary.priorityCounts.sekunder} itm)
-              </span>
-              <span style={{ color: theme.dim }}>|</span>
-              <span style={{ color: theme.opsText }}>
-                [3] OPSIONAL: {formatAmountK(summary.priorityTotals.opsional)} ({summary.priorityCounts.opsional} itm)
-              </span>
-              <span style={{ color: theme.dim }}>|</span>
-              <span style={{ color: theme.cadText }}>
-                [4] BUFFER: {formatAmountK(summary.priorityTotals.cadangan)} ({summary.priorityCounts.cadangan} itm)
-              </span>
-            </div>
-          </div>
-
-          {/* System Remarks / Notes */}
-          {rab.notes && (
+            {/* 2. Status Bar Prompt */}
             <div
-              className="p-2.5 border text-xs"
+              className="px-3 py-1.5 border-b flex flex-wrap items-center justify-between gap-2 text-xs font-bold"
               style={{
                 borderColor: theme.dim,
                 backgroundColor: theme.bg,
                 borderRadius: 0,
               }}
             >
-              <span style={{ color: theme.dim }} className="block font-bold">
-                // SYSTEM_REMARKS / CATATAN KHUSUS:
-              </span>
-              <p style={{ color: theme.highlightText }}>{rab.notes}</p>
-            </div>
-          )}
+              <div className="flex items-center gap-2 flex-wrap">
+                <span style={{ color: theme.bright }}>&gt; TARGET:</span>
+                <span style={{ color: theme.highlightText }} className="uppercase font-bold">
+                  {rab.name}
+                </span>
+                <span style={{ color: theme.dim }}>|</span>
+                <span style={{ color: theme.bright }}>PJ:</span>
+                <span style={{ color: theme.accent }}>{rab.pic_name.toUpperCase()}</span>
+                <span style={{ color: theme.dim }}>|</span>
+                <span style={{ color: theme.bright }}>STATUS:</span>
+                <span
+                  style={{
+                    color:
+                      rab.status === 'dialokasikan'
+                        ? '#4ade80'
+                        : rab.status === 'selesai'
+                        ? '#38bdf8'
+                        : '#fbbf24',
+                  }}
+                >
+                  [{rab.status.toUpperCase()}]
+                </span>
+              </div>
 
-          {/* 6. Console Stamp Signatures Panel */}
-          <div className="pt-2 flex flex-col sm:flex-row items-center justify-between gap-4 text-xs font-mono">
-            {/* PJ Signature Box */}
-            <div
-              className="w-full sm:w-64 border p-2.5 space-y-2"
-              style={{
-                borderColor: theme.border,
-                backgroundColor: theme.headerBg,
-                borderRadius: 0,
-              }}
-            >
-              <div className="text-[11px] font-bold" style={{ color: theme.dim }}>
-                ┌─────────────────────────────────┐
-              </div>
-              <div className="text-xs font-bold" style={{ color: theme.bright }}>
-                │ DISUSUN OLEH (PJ):
-              </div>
-              <div className="font-black text-sm uppercase py-1" style={{ color: theme.highlightText }}>
-                │ [ {rab.pic_name.toUpperCase()} ]
-              </div>
-              <div className="text-[10px] space-y-0.5" style={{ color: theme.dim }}>
-                <div>│ Date: {rab.created_at.slice(0, 10)}</div>
-                <div>│ Status: [SUBMITTED]</div>
-              </div>
-              <div className="text-[11px] font-bold" style={{ color: theme.dim }}>
-                └─────────────────────────────────┘
+              <div className="text-[11px]" style={{ color: theme.dim }}>
+                WAKTU: {rab.event_date || '-'} | VENUE: {rab.location || '-'}
               </div>
             </div>
 
-            {/* Middle System Telemetry Hash */}
-            <div className="text-center text-[10px] hidden md:block" style={{ color: theme.dim }}>
-              <div>KAS-TONGKRONGAN TUI ENGINE v3.0</div>
-              <div>DOC_HASH: {rab.id.slice(0, 20)}...</div>
-              <div>RENDER: FLAT_MONOSPACE_TURBO</div>
-            </div>
+            <div className="p-3 sm:p-4 space-y-3.5">
+              {/* 3. TUI Stat Metric Panels (Strict ASCII Boxes) */}
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-2.5">
+                {/* Box 1: Total Estimasi */}
+                <div
+                  className="border p-2.5 space-y-1"
+                  style={{
+                    borderColor: theme.border,
+                    backgroundColor: theme.headerBg,
+                    borderRadius: 0,
+                  }}
+                >
+                  <div className="text-[11px] font-bold" style={{ color: theme.bright }}>
+                    ┌─[ TOTAL ESTIMASI ]───────────────────┐
+                  </div>
+                  <div className="text-base sm:text-lg font-black" style={{ color: theme.highlightText }}>
+                    Rp {summary.totalBudget.toLocaleString('id-ID')}
+                  </div>
+                  <div className="text-xs font-bold" style={{ color: theme.accent }}>
+                    {renderAsciiProgressBar(summary.allocationPercentage, 10)}
+                  </div>
+                  <div className="text-[10px] text-right font-mono" style={{ color: theme.dim }}>
+                    └──────────────────────────────────────┘
+                  </div>
+                </div>
 
-            {/* Treasurer Signature Box */}
-            <div
-              className="w-full sm:w-64 border p-2.5 space-y-2"
-              style={{
-                borderColor: theme.border,
-                backgroundColor: theme.headerBg,
-                borderRadius: 0,
-              }}
-            >
-              <div className="text-[11px] font-bold" style={{ color: theme.dim }}>
-                ┌─────────────────────────────────┐
-              </div>
-              <div className="text-xs font-bold" style={{ color: theme.bright }}>
-                │ DIVERIFIKASI OLEH:
-              </div>
-              <div className="font-black text-sm uppercase py-1" style={{ color: theme.highlightText }}>
-                │ [ {treasurerName.toUpperCase()} ]
-              </div>
-              <div className="text-[10px] space-y-0.5" style={{ color: theme.dim }}>
-                <div>│ Role: Bendahara Kas</div>
-                <div>
-                  │ Status:{' '}
-                  <span
-                    style={{
-                      color: rab.status === 'dialokasikan' ? theme.bright : theme.wajibText,
-                    }}
+                {/* Box 2: Dana Teralokasi */}
+                <div
+                  className="border p-2.5 space-y-1"
+                  style={{
+                    borderColor: theme.border,
+                    backgroundColor: theme.headerBg,
+                    borderRadius: 0,
+                  }}
+                >
+                  <div className="text-[11px] font-bold" style={{ color: theme.bright }}>
+                    ┌─[ DANA TERALOKASI ]──────────────────┐
+                  </div>
+                  <div className="text-base sm:text-lg font-black" style={{ color: theme.bright }}>
+                    Rp {summary.allocatedAmount.toLocaleString('id-ID')}
+                  </div>
+                  <div className="text-xs font-bold" style={{ color: theme.text }}>
+                    Terpenuhi: {rab.items.length} Items ({formatAmountK(summary.allocatedAmount)})
+                  </div>
+                  <div className="text-[10px] text-right font-mono" style={{ color: theme.dim }}>
+                    └──────────────────────────────────────┘
+                  </div>
+                </div>
+
+                {/* Box 3: Kekurangan Biaya */}
+                <div
+                  className="border p-2.5 space-y-1"
+                  style={{
+                    borderColor: theme.border,
+                    backgroundColor: theme.headerBg,
+                    borderRadius: 0,
+                  }}
+                >
+                  <div className="text-[11px] font-bold" style={{ color: theme.bright }}>
+                    ┌─[ KEKURANGAN BIAYA ]─────────────────┐
+                  </div>
+                  <div
+                    className="text-base sm:text-lg font-black"
+                    style={{ color: summary.remainingNeeded > 0 ? theme.wajibText : theme.bright }}
                   >
-                    [{rab.status === 'dialokasikan' ? 'VERIFIED' : 'UNVERIFIED'}]
+                    Rp {summary.remainingNeeded.toLocaleString('id-ID')}
+                  </div>
+                  <div className="text-xs font-bold">
+                    Status:{' '}
+                    <span
+                      style={{
+                        color: summary.remainingNeeded === 0 ? theme.bright : theme.wajibText,
+                      }}
+                    >
+                      [{summary.remainingNeeded === 0 ? 'LUNAS / TERCUKUPI' : 'DEFICIT'}]
+                    </span>
+                  </div>
+                  <div className="text-[10px] text-right font-mono" style={{ color: theme.dim }}>
+                    └──────────────────────────────────────┘
+                  </div>
+                </div>
+              </div>
+
+              {/* 4. Strict ASCII Grid Table */}
+              <div
+                className="border overflow-x-auto"
+                style={{
+                  borderColor: theme.border,
+                  borderRadius: 0,
+                }}
+              >
+                <table
+                  className="w-full text-left text-xs border-collapse table-fixed"
+                  style={{
+                    borderColor: theme.border,
+                    borderRadius: 0,
+                  }}
+                >
+                  <thead>
+                    <tr
+                      className="font-bold border-b"
+                      style={{
+                        backgroundColor: theme.tableHeadBg,
+                        color: theme.tableHeadText,
+                        borderColor: theme.border,
+                      }}
+                    >
+                      <th className="py-2 px-2.5 w-[7%] text-center border-r" style={{ borderColor: theme.border }}>
+                        NO
+                      </th>
+                      <th className="py-2 px-3 w-[36%] border-r" style={{ borderColor: theme.border }}>
+                        NAMA LOGISTIK / JASA
+                      </th>
+                      <th className="py-2 px-2.5 w-[14%] text-center border-r" style={{ borderColor: theme.border }}>
+                        QTY/SAT
+                      </th>
+                      <th className="py-2 px-3 w-[15%] text-right border-r" style={{ borderColor: theme.border }}>
+                        HARGA/SAT
+                      </th>
+                      <th className="py-2 px-3 w-[16%] text-right border-r" style={{ borderColor: theme.border }}>
+                        SUBTOTAL
+                      </th>
+                      <th className="py-2 px-2 w-[12%] text-center">
+                        PRIO
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody className="text-xs">
+                    {rab.items.length === 0 ? (
+                      <tr>
+                        <td
+                          colSpan={6}
+                          className="py-6 text-center italic"
+                          style={{ color: theme.dim }}
+                        >
+                          // NULL: Belum ada rincian anggaran dalam dokumen ini.
+                        </td>
+                      </tr>
+                    ) : (
+                      rab.items.map((item, idx) => {
+                        let prioBadge = '[WAJ]';
+                        let prioColor = theme.wajibText;
+
+                        if (item.priority === 'sekunder') {
+                          prioBadge = '[SEK]';
+                          prioColor = theme.sekText;
+                        } else if (item.priority === 'opsional') {
+                          prioBadge = '[OPS]';
+                          prioColor = theme.opsText;
+                        } else if (item.priority === 'cadangan') {
+                          prioBadge = '[CAD]';
+                          prioColor = theme.cadText;
+                        }
+
+                        return (
+                          <tr
+                            key={item.id}
+                            className="border-b transition-none hover:bg-white/5"
+                            style={{ borderColor: theme.dim }}
+                          >
+                            {/* NO */}
+                            <td
+                              className="py-1.5 px-2.5 text-center font-bold border-r"
+                              style={{ borderColor: theme.dim, color: theme.dim }}
+                            >
+                              {String(idx + 1).padStart(2, '0')}
+                            </td>
+
+                            {/* NAMA LOGISTIK */}
+                            <td
+                              className="py-1.5 px-3 font-bold border-r truncate"
+                              style={{ borderColor: theme.dim }}
+                              title={item.name}
+                            >
+                              <span style={{ color: theme.highlightText }}>{item.name}</span>
+                              {item.notes && (
+                                <span className="block text-[10px] font-normal" style={{ color: theme.dim }}>
+                                  // {item.notes}
+                                </span>
+                              )}
+                            </td>
+
+                            {/* QTY/SAT */}
+                            <td
+                              className="py-1.5 px-2.5 text-center border-r whitespace-nowrap"
+                              style={{ borderColor: theme.dim }}
+                            >
+                              <span style={{ color: theme.accent }} className="font-bold">
+                                {item.qty}
+                              </span>{' '}
+                              <span style={{ color: theme.dim }}>{item.unit}</span>
+                            </td>
+
+                            {/* HARGA/SAT */}
+                            <td
+                              className="py-1.5 px-3 text-right border-r whitespace-nowrap"
+                              style={{ borderColor: theme.dim, color: theme.dim }}
+                            >
+                              {item.unit_price.toLocaleString('id-ID')}
+                            </td>
+
+                            {/* SUBTOTAL */}
+                            <td
+                              className="py-1.5 px-3 text-right font-black border-r whitespace-nowrap"
+                              style={{ borderColor: theme.dim, color: theme.highlightText }}
+                            >
+                              {item.subtotal.toLocaleString('id-ID')}
+                            </td>
+
+                            {/* PRIORITY TAG */}
+                            <td className="py-1.5 px-2 text-center whitespace-nowrap font-bold">
+                              <span style={{ color: prioColor }}>{prioBadge}</span>
+                            </td>
+                          </tr>
+                        );
+                      })
+                    )}
+                  </tbody>
+                  <tfoot>
+                    <tr
+                      className="font-bold border-t-2"
+                      style={{
+                        backgroundColor: theme.headerBg,
+                        borderColor: theme.border,
+                      }}
+                    >
+                      <td
+                        colSpan={4}
+                        className="py-2 px-3 text-right border-r uppercase"
+                        style={{ borderColor: theme.border, color: theme.bright }}
+                      >
+                        TOTAL BUDGET ESTIMATION :
+                      </td>
+                      <td
+                        className="py-2 px-3 text-right font-black text-sm border-r"
+                        style={{ borderColor: theme.border, color: theme.highlightText }}
+                      >
+                        Rp {summary.totalBudget.toLocaleString('id-ID')}
+                      </td>
+                      <td
+                        className="py-2 px-2 text-center text-[10px]"
+                        style={{ color: theme.dim }}
+                      >
+                        {rab.items.length} ITM
+                      </td>
+                    </tr>
+                  </tfoot>
+                </table>
+              </div>
+
+              {/* 5. Priority Matrix Summary */}
+              <div
+                className="p-2 border text-xs flex flex-wrap items-center justify-between gap-2 font-bold"
+                style={{
+                  borderColor: theme.border,
+                  backgroundColor: theme.headerBg,
+                  borderRadius: 0,
+                }}
+              >
+                <div className="flex items-center gap-3 flex-wrap">
+                  <span style={{ color: theme.bright }}>[PRIORITY MATRIX]:</span>
+                  <span style={{ color: theme.wajibText }}>
+                    [1] WAJIB: {formatAmountK(summary.priorityTotals.wajib)} ({summary.priorityCounts.wajib} itm)
+                  </span>
+                  <span style={{ color: theme.dim }}>|</span>
+                  <span style={{ color: theme.sekText }}>
+                    [2] SEKUNDER: {formatAmountK(summary.priorityTotals.sekunder)} ({summary.priorityCounts.sekunder} itm)
+                  </span>
+                  <span style={{ color: theme.dim }}>|</span>
+                  <span style={{ color: theme.opsText }}>
+                    [3] OPSIONAL: {formatAmountK(summary.priorityTotals.opsional)} ({summary.priorityCounts.opsional} itm)
+                  </span>
+                  <span style={{ color: theme.dim }}>|</span>
+                  <span style={{ color: theme.cadText }}>
+                    [4] BUFFER: {formatAmountK(summary.priorityTotals.cadangan)} ({summary.priorityCounts.cadangan} itm)
                   </span>
                 </div>
               </div>
-              <div className="text-[11px] font-bold" style={{ color: theme.dim }}>
-                └─────────────────────────────────┘
+
+              {/* System Remarks / Notes */}
+              {rab.notes && (
+                <div
+                  className="p-2.5 border text-xs"
+                  style={{
+                    borderColor: theme.dim,
+                    backgroundColor: theme.bg,
+                    borderRadius: 0,
+                  }}
+                >
+                  <span style={{ color: theme.dim }} className="block font-bold">
+                    // SYSTEM_REMARKS / CATATAN KHUSUS:
+                  </span>
+                  <p style={{ color: theme.highlightText }}>{rab.notes}</p>
+                </div>
+              )}
+
+              {/* 6. Console Stamp Signatures Panel */}
+              <div className="pt-2 flex flex-col sm:flex-row items-center justify-between gap-4 text-xs font-mono">
+                {/* PJ Signature Box */}
+                <div
+                  className="w-full sm:w-64 border p-2.5 space-y-2"
+                  style={{
+                    borderColor: theme.border,
+                    backgroundColor: theme.headerBg,
+                    borderRadius: 0,
+                  }}
+                >
+                  <div className="text-[11px] font-bold" style={{ color: theme.dim }}>
+                    ┌─────────────────────────────────┐
+                  </div>
+                  <div className="text-xs font-bold" style={{ color: theme.bright }}>
+                    │ DISUSUN OLEH (PJ):
+                  </div>
+                  <div className="font-black text-sm uppercase py-1" style={{ color: theme.highlightText }}>
+                    │ [ {rab.pic_name.toUpperCase()} ]
+                  </div>
+                  <div className="text-[10px] space-y-0.5" style={{ color: theme.dim }}>
+                    <div>│ Date: {rab.created_at.slice(0, 10)}</div>
+                    <div>│ Status: [SUBMITTED]</div>
+                  </div>
+                  <div className="text-[11px] font-bold" style={{ color: theme.dim }}>
+                    └─────────────────────────────────┘
+                  </div>
+                </div>
+
+                {/* Middle System Telemetry Hash */}
+                <div className="text-center text-[10px] hidden md:block" style={{ color: theme.dim }}>
+                  <div>KAS-TONGKRONGAN TUI ENGINE v3.0</div>
+                  <div>DOC_HASH: {rab.id.slice(0, 20)}...</div>
+                  <div>RENDER_SCALE: {Math.round(currentScale * 100)}%</div>
+                </div>
+
+                {/* Treasurer Signature Box */}
+                <div
+                  className="w-full sm:w-64 border p-2.5 space-y-2"
+                  style={{
+                    borderColor: theme.border,
+                    backgroundColor: theme.headerBg,
+                    borderRadius: 0,
+                  }}
+                >
+                  <div className="text-[11px] font-bold" style={{ color: theme.dim }}>
+                    ┌─────────────────────────────────┐
+                  </div>
+                  <div className="text-xs font-bold" style={{ color: theme.bright }}>
+                    │ DIVERIFIKASI OLEH:
+                  </div>
+                  <div className="font-black text-sm uppercase py-1" style={{ color: theme.highlightText }}>
+                    │ [ {treasurerName.toUpperCase()} ]
+                  </div>
+                  <div className="text-[10px] space-y-0.5" style={{ color: theme.dim }}>
+                    <div>│ Role: Bendahara Kas</div>
+                    <div>
+                      │ Status:{' '}
+                      <span
+                        style={{
+                          color: rab.status === 'dialokasikan' ? theme.bright : theme.wajibText,
+                        }}
+                      >
+                        [{rab.status === 'dialokasikan' ? 'VERIFIED' : 'UNVERIFIED'}]
+                      </span>
+                    </div>
+                  </div>
+                  <div className="text-[11px] font-bold" style={{ color: theme.dim }}>
+                    └─────────────────────────────────┘
+                  </div>
+                </div>
               </div>
             </div>
-          </div>
-        </div>
 
-        {/* 7. Action Hotkeys Bar (CLI Footer Bar) */}
-        <div
-          className="p-2 border-t flex flex-wrap items-center justify-between gap-1.5 text-xs font-bold"
-          style={{
-            backgroundColor: theme.tableHeadBg,
-            borderColor: theme.border,
-            color: theme.tableHeadText,
-            borderRadius: 0,
-          }}
-        >
-          <div className="flex items-center gap-2 flex-wrap">
-            <button
-              type="button"
-              onClick={handleExportPDF}
-              disabled={isExportingPDF || isExportingPNG}
-              className="px-2 py-0.5 border cursor-pointer hover:opacity-80 transition-none"
+            {/* 7. Action Hotkeys Bar (CLI Footer Bar) */}
+            <div
+              className="p-2 border-t flex flex-wrap items-center justify-between gap-1.5 text-xs font-bold"
               style={{
-                backgroundColor: theme.bg,
-                color: theme.bright,
+                backgroundColor: theme.tableHeadBg,
                 borderColor: theme.border,
+                color: theme.tableHeadText,
                 borderRadius: 0,
               }}
             >
-              [F1: Export PDF]
-            </button>
+              <div className="flex items-center gap-2 flex-wrap">
+                <button
+                  type="button"
+                  onClick={handleExportPDF}
+                  disabled={isExportingPDF || isExportingPNG}
+                  className="px-2 py-0.5 border cursor-pointer hover:opacity-80 transition-none"
+                  style={{
+                    backgroundColor: theme.bg,
+                    color: theme.bright,
+                    borderColor: theme.border,
+                    borderRadius: 0,
+                  }}
+                >
+                  [F1: Export PDF]
+                </button>
 
-            <button
-              type="button"
-              onClick={handleExportPNG}
-              disabled={isExportingPDF || isExportingPNG}
-              className="px-2 py-0.5 border cursor-pointer hover:opacity-80 transition-none"
-              style={{
-                backgroundColor: theme.bg,
-                color: theme.bright,
-                borderColor: theme.border,
-                borderRadius: 0,
-              }}
-            >
-              [F2: Export PNG]
-            </button>
+                <button
+                  type="button"
+                  onClick={handleExportPNG}
+                  disabled={isExportingPDF || isExportingPNG}
+                  className="px-2 py-0.5 border cursor-pointer hover:opacity-80 transition-none"
+                  style={{
+                    backgroundColor: theme.bg,
+                    color: theme.bright,
+                    borderColor: theme.border,
+                    borderRadius: 0,
+                  }}
+                >
+                  [F2: Export PNG]
+                </button>
 
-            <button
-              type="button"
-              onClick={handleCopyAscii}
-              className="px-2 py-0.5 border cursor-pointer hover:opacity-80 transition-none"
-              style={{
-                backgroundColor: theme.bg,
-                color: theme.bright,
-                borderColor: theme.border,
-                borderRadius: 0,
-              }}
-            >
-              [F3: Copy ASCII Text]
-            </button>
+                <button
+                  type="button"
+                  onClick={handleCopyAscii}
+                  className="px-2 py-0.5 border cursor-pointer hover:opacity-80 transition-none"
+                  style={{
+                    backgroundColor: theme.bg,
+                    color: theme.bright,
+                    borderColor: theme.border,
+                    borderRadius: 0,
+                  }}
+                >
+                  [F3: Copy ASCII Text]
+                </button>
 
-            {onEdit && (
-              <button
-                type="button"
-                onClick={onEdit}
-                className="px-2 py-0.5 border cursor-pointer hover:opacity-80 transition-none"
-                style={{
-                  backgroundColor: theme.bg,
-                  color: theme.bright,
-                  borderColor: theme.border,
-                  borderRadius: 0,
-                }}
-              >
-                [F4: Edit RAB]
-              </button>
-            )}
+                {onEdit && (
+                  <button
+                    type="button"
+                    onClick={onEdit}
+                    className="px-2 py-0.5 border cursor-pointer hover:opacity-80 transition-none"
+                    style={{
+                      backgroundColor: theme.bg,
+                      color: theme.bright,
+                      borderColor: theme.border,
+                      borderRadius: 0,
+                    }}
+                  >
+                    [F4: Edit RAB]
+                  </button>
+                )}
 
-            {onBack && (
-              <button
-                type="button"
-                onClick={onBack}
-                className="px-2 py-0.5 border cursor-pointer hover:opacity-80 transition-none"
-                style={{
-                  backgroundColor: theme.bg,
-                  color: theme.bright,
-                  borderColor: theme.border,
-                  borderRadius: 0,
-                }}
-              >
-                [ESC: Back]
-              </button>
-            )}
-          </div>
+                {onBack && (
+                  <button
+                    type="button"
+                    onClick={onBack}
+                    className="px-2 py-0.5 border cursor-pointer hover:opacity-80 transition-none"
+                    style={{
+                      backgroundColor: theme.bg,
+                      color: theme.bright,
+                      borderColor: theme.border,
+                      borderRadius: 0,
+                    }}
+                  >
+                    [ESC: Back]
+                  </button>
+                )}
+              </div>
 
-          <div className="text-[11px]" style={{ color: theme.accent }}>
-            ● CLI_SESSION_ONLINE [TTY_1]
+              <div className="text-[11px]" style={{ color: theme.accent }}>
+                ● CLI_SESSION_ONLINE [SCALE: {Math.round(currentScale * 100)}%]
+              </div>
+            </div>
           </div>
         </div>
       </div>
