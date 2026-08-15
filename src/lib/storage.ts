@@ -3,18 +3,19 @@ import {
   Transaction,
   MemberLoan,
   SystemConfig,
-  TransactionCategory,
-  PaymentMethod,
+  CreditRestorationItem,
 } from '../types';
 
-const STORAGE_KEY = 'kas_tongkrongan_v3_bendahara';
-const BROADCAST_CHANNEL_NAME = 'kas_tongkrongan_sync_v3';
+const STORAGE_KEY = 'kas_tongkrongan_v3_realtime_db';
+const RESTORATION_DAYS_MS = 3 * 24 * 60 * 60 * 1000; // 3 hari dalam milidetik
 
 export interface AppState {
   users: User[];
   loans: MemberLoan[];
   transactions: Transaction[];
+  credit_restorations?: CreditRestorationItem[];
   config: SystemConfig;
+  updated_at?: string;
 }
 
 export const DEFAULT_CONFIG: SystemConfig = {
@@ -38,79 +39,230 @@ export const AVATAR_COLORS = [
   'bg-cyan-600',
 ];
 
+/**
+ * Generate standard 2-letter uppercase initials from full name
+ * e.g. "Budi Santoso" -> "BU", "Ahmad" -> "AH", "Rio" -> "RI"
+ */
+export function getTwoLetterInitial(name: string): string {
+  if (!name) return '??';
+  const clean = name.trim().replace(/[^a-zA-Z0-9\s]/g, '');
+  const words = clean.split(/\s+/).filter(Boolean);
+
+  if (words.length >= 2) {
+    const first = words[0][0] || '';
+    const second = words[1][0] || '';
+    return (first + second).toUpperCase();
+  }
+
+  if (words.length === 1) {
+    const single = words[0];
+    if (single.length >= 2) {
+      return single.substring(0, 2).toUpperCase();
+    }
+    return (single + single).toUpperCase();
+  }
+
+  return 'KT';
+}
+
+/**
+ * Check and process 3-day automatic credit limit restorations
+ */
+export function processCreditRestorations(state: AppState): AppState {
+  if (!state.credit_restorations || state.credit_restorations.length === 0) {
+    return state;
+  }
+
+  const now = new Date().getTime();
+  let hasChanges = false;
+
+  const updatedUsers = [...state.users];
+  const updatedRestorations = state.credit_restorations.map((item) => {
+    if (!item.is_restored) {
+      const dueTime = new Date(item.restore_due_at).getTime();
+      if (now >= dueTime) {
+        // 3 days elapsed! Restore credit limit to default if user limit was reduced
+        const userIndex = updatedUsers.findIndex((u) => u.id === item.member_id);
+        if (userIndex !== -1) {
+          const user = updatedUsers[userIndex];
+          const defaultLimit = state.config.default_credit_limit || 20000;
+          if (user.credit_limit < defaultLimit) {
+            updatedUsers[userIndex] = {
+              ...user,
+              credit_limit: Math.min(defaultLimit, user.credit_limit + item.repaid_amount),
+            };
+          }
+        }
+        hasChanges = true;
+        return {
+          ...item,
+          is_restored: true,
+          restored_at: new Date().toISOString(),
+        };
+      }
+    }
+    return item;
+  });
+
+  if (hasChanges) {
+    return {
+      ...state,
+      users: updatedUsers,
+      credit_restorations: updatedRestorations,
+    };
+  }
+
+  return state;
+}
+
+// Initial state loader
 export function getInitialState(): AppState {
   try {
     const saved = localStorage.getItem(STORAGE_KEY);
     if (saved) {
       const parsed = JSON.parse(saved);
       if (Array.isArray(parsed.users)) {
-        return parsed;
+        return processCreditRestorations({
+          users: parsed.users.map((u: User) => ({
+            ...u,
+            avatar_initial: getTwoLetterInitial(u.name),
+          })),
+          loans: parsed.loans || [],
+          transactions: parsed.transactions || [],
+          credit_restorations: parsed.credit_restorations || [],
+          config: parsed.config || DEFAULT_CONFIG,
+        });
       }
     }
   } catch (err) {
-    console.error('Failed to load state from localStorage', err);
+    console.error('Failed to load state from local cache', err);
   }
 
   const initial: AppState = {
     users: [],
     loans: [],
     transactions: [],
+    credit_restorations: [],
     config: DEFAULT_CONFIG,
   };
 
-  saveState(initial);
+  saveStateLocal(initial);
   return initial;
 }
 
-let broadcastChannel: BroadcastChannel | null = null;
-try {
-  if (typeof window !== 'undefined' && 'BroadcastChannel' in window) {
-    broadcastChannel = new BroadcastChannel(BROADCAST_CHANNEL_NAME);
-  }
-} catch {
-  // BroadcastChannel unavailable
-}
+// WebSocket connection for real-time central database sync
+let socket: WebSocket | null = null;
+let reconnectTimer: any = null;
+const stateSubscribers: Array<(state: AppState) => void> = [];
 
-export function saveState(state: AppState) {
-  try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
-    if (broadcastChannel) {
-      broadcastChannel.postMessage({ type: 'STATE_UPDATED', timestamp: Date.now() });
-    }
-  } catch (err) {
-    console.error('Failed to save state to localStorage', err);
-  }
-}
+export function initRealtimeDatabase(onUpdate: (state: AppState) => void) {
+  stateSubscribers.push(onUpdate);
 
-export function subscribeToStateUpdates(callback: (state: AppState) => void): () => void {
-  const handleStorage = (event: StorageEvent) => {
-    if (event.key === STORAGE_KEY && event.newValue) {
-      try {
-        callback(JSON.parse(event.newValue));
-      } catch (err) {
-        console.error(err);
+  // 1. Initial fetch from Backend Database REST API
+  fetch('/api/state')
+    .then((res) => res.json())
+    .then((res) => {
+      if (res && res.status === 'success' && res.data) {
+        const syncedState = processCreditRestorations(res.data);
+        saveStateLocal(syncedState);
+        onUpdate(syncedState);
       }
-    }
-  };
+    })
+    .catch((err) => {
+      console.warn('[DB] Offline/Local mode fallback for initial load:', err);
+    });
 
-  const handleBroadcast = (event: MessageEvent) => {
-    if (event.data && event.data.type === 'STATE_UPDATED') {
-      const state = getInitialState();
-      callback(state);
-    }
-  };
+  // 2. Connect WebSocket for instant live sync across all devices
+  function connectWS() {
+    if (typeof window === 'undefined') return;
+    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+    const wsUrl = `${protocol}//${window.location.host}/ws/kas`;
 
-  window.addEventListener('storage', handleStorage);
-  if (broadcastChannel) {
-    broadcastChannel.addEventListener('message', handleBroadcast);
+    try {
+      socket = new WebSocket(wsUrl);
+
+      socket.onopen = () => {
+        console.log('[Realtime DB] Connected to central database stream.');
+      };
+
+      socket.onmessage = (event) => {
+        try {
+          const payload = JSON.parse(event.data);
+          if ((payload.type === 'SYNC_STATE' || payload.type === 'INIT_STATE') && payload.state) {
+            const freshState = processCreditRestorations(payload.state);
+            saveStateLocal(freshState);
+            stateSubscribers.forEach((cb) => cb(freshState));
+          }
+        } catch (err) {
+          console.error('[Realtime DB] Error parsing websocket message:', err);
+        }
+      };
+
+      socket.onclose = () => {
+        console.log('[Realtime DB] Disconnected, attempting reconnect in 3s...');
+        clearTimeout(reconnectTimer);
+        reconnectTimer = setTimeout(connectWS, 3000);
+      };
+
+      socket.onerror = (err) => {
+        console.warn('[Realtime DB] WebSocket error:', err);
+        socket?.close();
+      };
+    } catch (err) {
+      console.error('[Realtime DB] Failed to create WebSocket connection:', err);
+    }
   }
+
+  connectWS();
 
   return () => {
-    window.removeEventListener('storage', handleStorage);
-    if (broadcastChannel) {
-      broadcastChannel.removeEventListener('message', handleBroadcast);
+    const idx = stateSubscribers.indexOf(onUpdate);
+    if (idx !== -1) {
+      stateSubscribers.splice(idx, 1);
     }
   };
+}
+
+export function saveStateLocal(state: AppState) {
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+  } catch (err) {
+    console.error('Failed to save state to local cache', err);
+  }
+}
+
+/**
+ * Persist state to Central Database & Realtime broadcast
+ */
+export async function persistStateToDatabase(state: AppState): Promise<AppState> {
+  const processedState = processCreditRestorations(state);
+  saveStateLocal(processedState);
+
+  // If WebSocket connected, send instant update
+  if (socket && socket.readyState === WebSocket.OPEN) {
+    socket.send(
+      JSON.stringify({
+        type: 'UPDATE_STATE',
+        state: processedState,
+        timestamp: Date.now(),
+      })
+    );
+  }
+
+  // Backup sync via HTTP POST
+  try {
+    fetch('/api/state', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(processedState),
+    }).catch((err) => {
+      console.warn('[Realtime DB] HTTP background sync notice:', err);
+    });
+  } catch (err) {
+    // Ignore network error in offline mode
+  }
+
+  return processedState;
 }
 
 // Format numbers with thousand separator dots (e.g. 50000 -> 50.000)
@@ -174,6 +326,7 @@ export function calculateFinancialSummary(state: AppState) {
 // Member Detailed Statistics Calculation
 export interface MemberStats {
   totalMasuk: number;
+  totalPinjam: number;
   masukPekanIni: number;
   masukBulanIni: number;
   sisaHutang: number;
@@ -185,6 +338,7 @@ export interface MemberStats {
   labelKepatuhan: string; // 'Sangat Patuh', 'Patuh', 'Cukup', 'Perlu Perhatian'
   badgeColor: string;
   transaksiCount: number;
+  pendingRestorations: CreditRestorationItem[];
 }
 
 export function calculateMemberStats(user: User, state: AppState): MemberStats {
@@ -193,29 +347,45 @@ export function calculateMemberStats(user: User, state: AppState): MemberStats {
   const thirtyDaysAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
 
   let totalMasuk = 0;
+  let totalPinjam = 0;
   let masukPekanIni = 0;
   let masukBulanIni = 0;
   let transaksiCount = 0;
 
+  const isMatchingMember = (memberId?: string, memberName?: string) => {
+    if (memberId && memberId === user.id) return true;
+    if (memberName && user.name && memberName.toLowerCase().trim() === user.name.toLowerCase().trim()) return true;
+    return false;
+  };
+
   state.transactions.forEach((tx) => {
-    if (tx.member_id === user.id && tx.direction === 'masuk') {
-      totalMasuk += tx.amount;
+    if (isMatchingMember(tx.member_id, tx.member_name)) {
       transaksiCount++;
       const txDate = new Date(tx.created_at);
-      if (txDate >= sevenDaysAgo) {
-        masukPekanIni += tx.amount;
-      }
-      if (txDate >= thirtyDaysAgo) {
-        masukBulanIni += tx.amount;
+      if (tx.direction === 'masuk') {
+        totalMasuk += tx.amount;
+        if (txDate >= sevenDaysAgo) {
+          masukPekanIni += tx.amount;
+        }
+        if (txDate >= thirtyDaysAgo) {
+          masukBulanIni += tx.amount;
+        }
+      } else if (tx.category === 'pinjaman_keluar' || tx.direction === 'keluar') {
+        totalPinjam += tx.amount;
       }
     }
   });
 
-  // Calculate active loans for this member
-  const memberLoans = state.loans.filter(
-    (l) => l.member_id === user.id && (l.status === 'active' || l.status === 'overdue')
-  );
-  const sisaHutang = memberLoans.reduce((sum, l) => sum + l.remaining_amount, 0);
+  // Calculate active loans for this member (match ID or Name)
+  const allMemberLoans = state.loans.filter((l) => isMatchingMember(l.member_id, l.member_name));
+  const activeMemberLoans = allMemberLoans.filter((l) => l.status === 'active' || l.status === 'overdue');
+  const sisaHutang = activeMemberLoans.reduce((sum, l) => sum + l.remaining_amount, 0);
+
+  // If totalPinjam was 0 from transactions, fallback to total amount from loan records
+  if (totalPinjam === 0 && allMemberLoans.length > 0) {
+    totalPinjam = allMemberLoans.reduce((sum, l) => sum + l.amount, 0);
+  }
+
   const dendaTertunda = user.unpaid_fine || 0;
 
   const plafonKredit = user.credit_limit ?? 20000;
@@ -252,8 +422,14 @@ export function calculateMemberStats(user: User, state: AppState): MemberStats {
     badgeColor = 'bg-rose-50 text-rose-700 border-rose-300';
   }
 
+  // Pending 3-day restorations for this member
+  const pendingRestorations = (state.credit_restorations || []).filter(
+    (item) => isMatchingMember(item.member_id, item.member_name) && !item.is_restored
+  );
+
   return {
     totalMasuk,
+    totalPinjam,
     masukPekanIni,
     masukBulanIni,
     sisaHutang,
@@ -265,10 +441,22 @@ export function calculateMemberStats(user: User, state: AppState): MemberStats {
     labelKepatuhan,
     badgeColor,
     transaksiCount,
+    pendingRestorations,
   };
 }
 
-export function resetAppState(): AppState {
+export async function resetAppState(): Promise<AppState> {
+  try {
+    const res = await fetch('/api/reset', { method: 'POST' });
+    const json = await res.json();
+    if (json && json.data) {
+      saveStateLocal(json.data);
+      return json.data;
+    }
+  } catch (err) {
+    console.warn('[DB] Fallback local reset:', err);
+  }
+
   localStorage.removeItem(STORAGE_KEY);
   const fresh = getInitialState();
   return fresh;

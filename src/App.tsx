@@ -6,13 +6,16 @@ import {
   SystemConfig,
   TransactionCategory,
   PaymentMethod,
+  CreditRestorationItem,
 } from './types';
 import {
   getInitialState,
-  saveState,
+  initRealtimeDatabase,
+  persistStateToDatabase,
   calculateFinancialSummary,
   calculateMemberStats,
   formatRupiah,
+  getTwoLetterInitial,
   AVATAR_COLORS,
   AppState,
 } from './lib/storage';
@@ -28,6 +31,7 @@ import { KasMasukModal } from './components/modals/KasMasukModal';
 import { KasKeluarModal } from './components/modals/KasKeluarModal';
 import { MemberFormModal } from './components/modals/MemberFormModal';
 import { ManageCreditModal } from './components/modals/ManageCreditModal';
+import { MemberDetailModal } from './components/modals/MemberDetailModal';
 import { ReceiptModal } from './components/modals/ReceiptModal';
 import { AdminSettingsModal } from './components/modals/AdminSettingsModal';
 import { QRISViewerModal } from './components/modals/QRISViewerModal';
@@ -38,12 +42,10 @@ import {
   ArrowDownLeft,
   ArrowUpRight,
   Users,
-  HandCoins,
   Receipt,
-  CheckCircle,
-  AlertTriangle,
-  Sparkles,
   ChevronRight,
+  Radio,
+  Wifi,
 } from 'lucide-react';
 
 export function App() {
@@ -56,6 +58,7 @@ export function App() {
   const [isMemberFormOpen, setIsMemberFormOpen] = useState(false);
   const [editingMember, setEditingMember] = useState<User | null>(null);
   const [managingCreditUser, setManagingCreditUser] = useState<User | null>(null);
+  const [detailMember, setDetailMember] = useState<User | null>(null);
   const [selectedReceiptTx, setSelectedReceiptTx] = useState<Transaction | null>(null);
   const [isAdminSettingsOpen, setIsAdminSettingsOpen] = useState(false);
   const [isQRISOpen, setIsQRISOpen] = useState(false);
@@ -72,8 +75,16 @@ export function App() {
     setToastMessage(msg);
     setTimeout(() => {
       setToastMessage((current) => (current === msg ? null : current));
-    }, 3000);
+    }, 3500);
   };
+
+  // Realtime Database sync subscription
+  useEffect(() => {
+    const unsubscribe = initRealtimeDatabase((syncedState) => {
+      setState(syncedState);
+    });
+    return () => unsubscribe();
+  }, []);
 
   // Handle URL shortcut actions (PWA shortcuts like ?action=kas-masuk or ?tab=anggota)
   useEffect(() => {
@@ -94,11 +105,11 @@ export function App() {
     }
   }, []);
 
-  // Sync state changes with persistence
-  const updateStateAndSave = (updater: (prev: AppState) => AppState) => {
+  // Sync state changes with Realtime DB persistence
+  const updateStateAndPersist = (updater: (prev: AppState) => AppState) => {
     setState((prev) => {
       const next = updater(prev);
-      saveState(next);
+      persistStateToDatabase(next);
       return next;
     });
   };
@@ -133,22 +144,47 @@ export function App() {
       created_at: new Date().toISOString(),
     };
 
-    updateStateAndSave((prev) => {
+    updateStateAndPersist((prev) => {
       let updatedLoans = [...prev.loans];
       let updatedUsers = [...prev.users];
+      let updatedRestorations: CreditRestorationItem[] = [...(prev.credit_restorations || [])];
 
-      // If category is hutang / debt repayment or if user has active loans
-      if (data.category === 'hutang' && data.memberId) {
+      // If category is hutang / debt repayment
+      if (data.category === 'hutang') {
         let remainingRepayment = data.amount;
+        let totalRepaidForThisMember = 0;
+
         updatedLoans = updatedLoans.map((loan) => {
-          if (loan.member_id === data.memberId && loan.remaining_amount > 0 && remainingRepayment > 0) {
+          const isTargetLoan =
+            (data.memberId && loan.member_id === data.memberId) ||
+            (loan.member_name.toLowerCase().trim() === data.memberName.toLowerCase().trim());
+
+          if (isTargetLoan && loan.remaining_amount > 0 && remainingRepayment > 0) {
             const payAmt = Math.min(loan.remaining_amount, remainingRepayment);
             remainingRepayment -= payAmt;
+            totalRepaidForThisMember += payAmt;
             const newRemaining = loan.remaining_amount - payAmt;
+
+            // Schedule 3-day automatic credit restoration
+            if (payAmt > 0) {
+              const restorationDue = new Date(Date.now() + 3 * 24 * 60 * 60 * 1000).toISOString();
+              updatedRestorations.push({
+                id: `RESTORE-${Date.now()}-${loan.id}`,
+                member_id: loan.member_id,
+                member_name: loan.member_name,
+                loan_id: loan.id,
+                repaid_amount: payAmt,
+                repaid_at: new Date().toISOString(),
+                restore_due_at: restorationDue,
+                is_restored: false,
+              });
+            }
+
             return {
               ...loan,
               remaining_amount: newRemaining,
               status: newRemaining === 0 ? ('paid' as const) : ('active' as const),
+              repaid_at: newRemaining === 0 ? new Date().toISOString() : undefined,
             };
           }
           return loan;
@@ -182,10 +218,15 @@ export function App() {
         transactions: [newTx, ...prev.transactions],
         loans: updatedLoans,
         users: updatedUsers,
+        credit_restorations: updatedRestorations,
       };
     });
 
-    showToast(`✅ Berhasil mencatat Kas Masuk Rp ${formatRupiah(data.amount)} dari ${data.memberName}`);
+    if (data.category === 'hutang') {
+      showToast(`✅ Hutang Rp ${formatRupiah(data.amount)} terbayar! Limit kredit akan pulih otomatis dalam 3 hari.`);
+    } else {
+      showToast(`✅ Berhasil mencatat Kas Masuk Rp ${formatRupiah(data.amount)} dari ${data.memberName}`);
+    }
   };
 
   const handleKasKeluarSuccess = (data: {
@@ -209,14 +250,16 @@ export function App() {
       created_at: new Date().toISOString(),
     };
 
-    updateStateAndSave((prev) => {
+    updateStateAndPersist((prev) => {
       let updatedLoans = [...prev.loans];
+      let updatedUsers = [...prev.users];
 
-      // If category is pinjaman_keluar -> Create new MemberLoan
-      if (data.category === 'pinjaman_keluar' && data.memberId) {
+      // If category is pinjaman_keluar -> Kurangi jatah kredit anggota & catat pinjaman
+      if (data.category === 'pinjaman_keluar') {
+        const borrowerId = data.memberId || `BORROWER-${Date.now()}`;
         const newLoan: MemberLoan = {
           id: `LOAN-${Date.now()}`,
-          member_id: data.memberId,
+          member_id: borrowerId,
           member_name: data.memberName,
           amount: data.amount,
           remaining_amount: data.amount,
@@ -226,16 +269,35 @@ export function App() {
           notes: data.notes,
         };
         updatedLoans = [newLoan, ...updatedLoans];
+
+        // Kurangi jatah kredit langsung jika anggota terdaftar
+        if (data.memberId) {
+          updatedUsers = updatedUsers.map((u) => {
+            if (u.id === data.memberId) {
+              const currentCredit = u.credit_limit ?? 20000;
+              return {
+                ...u,
+                credit_limit: Math.max(0, currentCredit - data.amount),
+              };
+            }
+            return u;
+          });
+        }
       }
 
       return {
         ...prev,
         transactions: [newTx, ...prev.transactions],
         loans: updatedLoans,
+        users: updatedUsers,
       };
     });
 
-    showToast(`📤 Berhasil mencatat Kas Keluar Rp ${formatRupiah(data.amount)} (${data.memberName})`);
+    if (data.category === 'pinjaman_keluar') {
+      showToast(`🤝 Pinjaman Rp ${formatRupiah(data.amount)} cair ke ${data.memberName}. Limit kreditnya telah dikurangi.`);
+    } else {
+      showToast(`📤 Berhasil mencatat Kas Keluar Rp ${formatRupiah(data.amount)} (${data.memberName})`);
+    }
   };
 
   // -------------------------------------------------------------
@@ -250,9 +312,11 @@ export function App() {
     role: any;
     credit_limit: number;
   }) => {
+    const initials = getTwoLetterInitial(data.name);
+
     if (editingMember) {
       // Update existing member
-      updateStateAndSave((prev) => ({
+      updateStateAndPersist((prev) => ({
         ...prev,
         users: prev.users.map((u) =>
           u.id === editingMember.id
@@ -263,6 +327,7 @@ export function App() {
                 instagram: data.instagram,
                 address: data.address,
                 role: data.role,
+                avatar_initial: initials,
                 credit_limit: data.credit_limit,
               }
             : u
@@ -272,12 +337,6 @@ export function App() {
       setEditingMember(null);
     } else {
       // Add new member
-      const initials = data.name
-        .split(' ')
-        .map((n) => n[0])
-        .join('')
-        .toUpperCase()
-        .slice(0, 2);
       const randomColor = AVATAR_COLORS[Math.floor(Math.random() * AVATAR_COLORS.length)];
 
       const newUser: User = {
@@ -287,7 +346,7 @@ export function App() {
         instagram: data.instagram,
         address: data.address,
         role: data.role,
-        avatar_initial: initials || 'TG',
+        avatar_initial: initials,
         avatar_color: randomColor,
         credit_limit: data.credit_limit || 20000,
         is_credit_frozen: false,
@@ -295,20 +354,20 @@ export function App() {
         joined_at: new Date().toISOString(),
       };
 
-      updateStateAndSave((prev) => ({
+      updateStateAndPersist((prev) => ({
         ...prev,
         users: [...prev.users, newUser],
       }));
-      showToast(`Anggota baru ${data.name} berhasil didaftarkan!`);
+      showToast(`Anggota baru ${data.name} (${initials}) berhasil didaftarkan!`);
     }
   };
 
   const handleDeleteMember = (userId: string) => {
-    updateStateAndSave((prev) => ({
+    updateStateAndPersist((prev) => ({
       ...prev,
       users: prev.users.filter((u) => u.id !== userId),
     }));
-    showToast('Anggota berhasil dihapus dari sistem.');
+    showToast('Anggota berhasil dihapus dari database.');
   };
 
   const handleSaveCreditAndStatus = (
@@ -320,7 +379,7 @@ export function App() {
       unpaid_fine: number;
     }
   ) => {
-    updateStateAndSave((prev) => ({
+    updateStateAndPersist((prev) => ({
       ...prev,
       users: prev.users.map((u) =>
         u.id === userId
@@ -371,7 +430,7 @@ export function App() {
       year: 'numeric',
     });
 
-    let text = `📢 *LAPORAN KEUANGAN KAS TONGKRONGAN*\n`;
+    let text = `📢 *LAPORAN KEUANGAN REAL-TIME KAS TONGKRONGAN*\n`;
     text += `📅 Update: ${nowStr}\n`;
     text += `👤 Bendahara: ${state.config.treasurer_name}\n`;
     text += `━━━━━━━━━━━━━━━━━━━━\n`;
@@ -385,16 +444,16 @@ export function App() {
     text += `👥 *STATUS ANGGOTA (${state.users.length} Orang):*\n`;
     state.users.forEach((u, i) => {
       const stats = calculateMemberStats(u, state);
-      text += `${i + 1}. *${u.name}*\n`;
+      text += `${i + 1}. *[${u.avatar_initial}] ${u.name}*\n`;
       text += `   • Total Masuk: Rp ${formatRupiah(stats.totalMasuk)}\n`;
-      text += `   • Pekan Ini: Rp ${formatRupiah(stats.masukPekanIni)} | Bln Ini: Rp ${formatRupiah(stats.masukBulanIni)}\n`;
+      text += `   • Pekan Ini: Rp ${formatRupiah(stats.masukPekanIni)} | Bln: Rp ${formatRupiah(stats.masukBulanIni)}\n`;
       if (stats.sisaHutang > 0) {
         text += `   • 🔴 Sisa Hutang: Rp ${formatRupiah(stats.sisaHutang)}\n`;
       }
       if (stats.dendaTertunda > 0) {
         text += `   • ⚡ Denda: Rp ${formatRupiah(stats.dendaTertunda)}\n`;
       }
-      text += `   • Jatah Kredit: Rp ${formatRupiah(stats.plafonKredit)} (${stats.isCreditFrozen ? '⚠️ BEKU' : 'AKTIF'})\n`;
+      text += `   • Sisa Kredit: Rp ${formatRupiah(u.credit_limit || 0)} (Maks: Rp ${formatRupiah(stats.plafonKredit)})\n`;
       text += `   • Kepatuhan: ${stats.skorKepatuhan}% (${stats.labelKepatuhan})\n\n`;
     });
 
@@ -417,6 +476,7 @@ export function App() {
       users: [],
       transactions: [],
       loans: [],
+      credit_restorations: [],
       config: {
         weekly_target: 20000,
         due_day: 'Sabtu',
@@ -428,9 +488,8 @@ export function App() {
         default_credit_limit: 20000,
       },
     };
-    setState(emptyState);
-    saveState(emptyState);
-    showToast('Semua data berhasil dikosongkan!');
+    updateStateAndPersist(() => emptyState);
+    showToast('Semua database kas berhasil dikosongkan!');
   };
 
   return (
@@ -441,6 +500,18 @@ export function App() {
           <span>{toastMessage}</span>
         </div>
       )}
+
+      {/* Realtime Central DB Status Indicator Badge */}
+      <div className="w-full bg-slate-900 text-white px-4 py-1 text-[11px] font-semibold flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
+          <span>Central Real-time Database: Aktif & Tersinkronisasi</span>
+        </div>
+        <div className="flex items-center gap-1.5 text-slate-400 text-[10px]">
+          <Wifi className="w-3 h-3 text-emerald-400" />
+          <span>Live WebSocket Sync</span>
+        </div>
+      </div>
 
       {/* PWA In-App Install Banner */}
       <PWAInstallBanner
@@ -526,7 +597,11 @@ export function App() {
                     {state.users.slice(0, 4).map((user) => {
                       const stats = calculateMemberStats(user, state);
                       return (
-                        <div key={user.id} className="py-2.5 flex items-center justify-between gap-2">
+                        <div
+                          key={user.id}
+                          className="py-2.5 flex items-center justify-between gap-2 cursor-pointer hover:bg-slate-50/80 px-1 rounded-lg transition-colors"
+                          onClick={() => setDetailMember(user)}
+                        >
                           <div className="flex items-center gap-2.5">
                             <div
                               className={`w-8 h-8 rounded-full ${user.avatar_color} text-white flex items-center justify-center font-bold text-xs font-heading`}
@@ -536,7 +611,7 @@ export function App() {
                             <div>
                               <p className="text-xs font-bold text-slate-800">{user.name}</p>
                               <p className="text-[10px] text-slate-400">
-                                Masuk: Rp {formatRupiah(stats.totalMasuk)}
+                                Sisa Kredit: Rp {formatRupiah(user.credit_limit || 0)}
                               </p>
                             </div>
                           </div>
@@ -549,7 +624,10 @@ export function App() {
                             )}
                             <button
                               type="button"
-                              onClick={() => openKasMasukForUser(user)}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                openKasMasukForUser(user);
+                              }}
                               className="p-1.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 rounded-lg text-xs font-bold"
                               title="Catat Kas Masuk"
                             >
@@ -668,6 +746,7 @@ export function App() {
             onOpenKasMasukWithMember={(u) => openKasMasukForUser(u, 'iuran')}
             onOpenKasKeluarWithMember={(u) => openKasKeluarForUser(u)}
             onOpenManageCredit={(u) => setManagingCreditUser(u)}
+            onOpenMemberDetail={(u) => setDetailMember(u)}
           />
         )}
 
@@ -675,6 +754,7 @@ export function App() {
           <LoanManagementModule
             loans={state.loans}
             users={state.users}
+            transactions={state.transactions}
             onRepayLoan={handleRepayLoan}
             onOpenKasKeluarLoan={() => {
               setPreSelectedMemberId(undefined);
@@ -682,6 +762,7 @@ export function App() {
               setIsKasKeluarOpen(true);
             }}
             onOpenManageCredit={(u) => setManagingCreditUser(u)}
+            onOpenMemberDetail={(u) => setDetailMember(u)}
           />
         )}
 
@@ -742,33 +823,44 @@ export function App() {
         onSave={handleSaveCreditAndStatus}
       />
 
-      {/* 5. Modal Resi Digital */}
+      {/* 5. Modal Member Detail & Trackrecord Lengkap */}
+      <MemberDetailModal
+        isOpen={!!detailMember}
+        onClose={() => setDetailMember(null)}
+        user={detailMember}
+        state={state}
+        onOpenKasMasuk={(u) => openKasMasukForUser(u, 'iuran')}
+        onOpenKasKeluar={(u) => openKasKeluarForUser(u)}
+        onDeleteMember={handleDeleteMember}
+      />
+
+      {/* 6. Modal Resi Digital */}
       <ReceiptModal
         isOpen={!!selectedReceiptTx}
         onClose={() => setSelectedReceiptTx(null)}
         transaction={selectedReceiptTx}
       />
 
-      {/* 6. Modal Pengaturan Kas */}
+      {/* 7. Modal Pengaturan Kas */}
       <AdminSettingsModal
         isOpen={isAdminSettingsOpen}
         onClose={() => setIsAdminSettingsOpen(false)}
         config={state.config}
         onOpenInstallPWA={() => setIsInstallModalOpen(true)}
         onSaveConfig={(newConfig) => {
-          updateStateAndSave((prev) => ({ ...prev, config: newConfig }));
+          updateStateAndPersist((prev) => ({ ...prev, config: newConfig }));
         }}
         onResetData={handleResetData}
       />
 
-      {/* 7. Modal QRIS Viewer */}
+      {/* 8. Modal QRIS Viewer */}
       <QRISViewerModal
         isOpen={isQRISOpen}
         onClose={() => setIsQRISOpen(false)}
         treasurerName={state.config.treasurer_name}
       />
 
-      {/* 8. Modal Install PWA & Offline Guide */}
+      {/* 9. Modal Install PWA & Offline Guide */}
       <PWAInstallModal
         isOpen={isInstallModalOpen}
         onClose={() => setIsInstallModalOpen(false)}

@@ -29,8 +29,10 @@ export const MemberFormModal: React.FC<MemberFormModalProps> = ({
   const [address, setAddress] = useState('');
   const [role, setRole] = useState<UserRole>('member');
   const [creditLimitStr, setCreditLimitStr] = useState('20.000');
+  const [errorMessage, setErrorMessage] = useState('');
 
   useEffect(() => {
+    setErrorMessage('');
     if (initialData) {
       setName(initialData.name);
       setPhone(initialData.phone_number);
@@ -53,7 +55,7 @@ export const MemberFormModal: React.FC<MemberFormModalProps> = ({
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!name.trim() || !phone.trim()) {
-      alert('Harap isi Nama Lengkap dan Nomor WhatsApp.');
+      setErrorMessage('Harap isi Nama Lengkap dan Nomor WhatsApp anggota.');
       return;
     }
 
@@ -101,6 +103,11 @@ export const MemberFormModal: React.FC<MemberFormModalProps> = ({
 
         {/* Form */}
         <form onSubmit={handleSubmit} className="p-6 space-y-4">
+          {errorMessage && (
+            <div className="p-3 bg-rose-50 border border-rose-200 text-rose-700 text-xs rounded-xl font-medium">
+              {errorMessage}
+            </div>
+          )}
           {/* Nama */}
           <div className="space-y-1">
             <label className="text-xs font-bold text-slate-700">

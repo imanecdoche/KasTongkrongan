@@ -7,7 +7,7 @@ export interface User {
   instagram: string;
   address: string;
   role: UserRole;
-  avatar_initial: string;
+  avatar_initial: string; // 2 huruf pertama dari nama
   avatar_color: string;
   created_at?: string;
   joined_at?: string;
@@ -65,6 +65,19 @@ export interface MemberLoan {
   notes: string;
   repaid_at?: string;
   created_at?: string;
+}
+
+// Scheduled 3-day Credit Restoration Queue
+export interface CreditRestorationItem {
+  id: string;
+  member_id: string;
+  member_name: string;
+  loan_id: string;
+  repaid_amount: number;
+  repaid_at: string;
+  restore_due_at: string; // Timestamp ISO 3 hari setelah pelunasan
+  is_restored: boolean;
+  restored_at?: string;
 }
 
 export interface SystemConfig {

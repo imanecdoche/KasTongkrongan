@@ -1,7 +1,15 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { User, PaymentMethod, TransactionCategory } from '../../types';
 import { formatRupiah, parseRupiahInput } from '../../lib/storage';
-import { X, ArrowDownLeft, UserCheck, AlertCircle, CheckCircle2 } from 'lucide-react';
+import { SearchableCombobox, ComboboxOption } from '../SearchableCombobox';
+import {
+  X,
+  ArrowDownLeft,
+  AlertCircle,
+  CheckCircle2,
+  Receipt,
+  UserCheck,
+} from 'lucide-react';
 
 interface KasMasukModalProps {
   isOpen: boolean;
@@ -23,6 +31,49 @@ interface KasMasukModalProps {
 
 const QUICK_AMOUNTS = [5000, 10000, 20000, 50000, 100000];
 
+const MASUK_CATEGORY_OPTIONS: ComboboxOption[] = [
+  {
+    value: 'iuran',
+    label: 'Bayar Iuran Rutin Kas',
+    icon: '💰',
+    badge: 'Iuran',
+    badgeColor: 'blue',
+    description: 'Setoran mingguan atau bulanan rutin anggota kas',
+  },
+  {
+    value: 'hutang',
+    label: 'Bayar / Pelunasan Hutang (Pinjaman)',
+    icon: '🤝',
+    badge: 'Pelunasan',
+    badgeColor: 'emerald',
+    description: 'Pengembalian pinjaman talangan (pulihkan kredit)',
+  },
+  {
+    value: 'denda',
+    label: 'Bayar Denda Keterlambatan',
+    icon: '⚠️',
+    badge: 'Denda',
+    badgeColor: 'amber',
+    description: 'Sanksi keterlambatan iuran atau kesepakatan tongkrongan',
+  },
+  {
+    value: 'iuran_plus_denda',
+    label: 'Paket Iuran + Denda Sekaligus',
+    icon: '⚡',
+    badge: 'Kombinasi',
+    badgeColor: 'purple',
+    description: 'Bayar iuran kas dan sanksi denda dalam 1 pembayaran',
+  },
+  {
+    value: 'pemasukan_lain',
+    label: 'Donasi / Sumbangan / Lainnya',
+    icon: '🎁',
+    badge: 'Donasi',
+    badgeColor: 'slate',
+    description: 'Sumbangan sukarela, donatur, atau hasil event',
+  },
+];
+
 export const KasMasukModal: React.FC<KasMasukModalProps> = ({
   isOpen,
   onClose,
@@ -43,18 +94,51 @@ export const KasMasukModal: React.FC<KasMasukModalProps> = ({
   const [duesPortionStr, setDuesPortionStr] = useState<string>('20.000');
   const [finePortionStr, setFinePortionStr] = useState<string>('2.000');
 
-  // Sync state when preSelected changes
-  React.useEffect(() => {
-    if (preSelectedMemberId) {
-      setMemberId(preSelectedMemberId);
-    } else if (users.length > 0 && memberId === 'non_member') {
-      setMemberId(users[0].id);
+  // Sync state when props or isOpen changes
+  useEffect(() => {
+    if (isOpen) {
+      setCategory(preSelectedCategory || 'iuran');
+      if (preSelectedMemberId) {
+        setMemberId(preSelectedMemberId);
+      } else if (users.length > 0) {
+        setMemberId(users[0].id);
+      } else {
+        setMemberId('non_member');
+      }
+      setAmountStr('20.000');
+      setErrorMsg('');
     }
-  }, [preSelectedMemberId, users]);
+  }, [isOpen, preSelectedCategory, preSelectedMemberId, users]);
 
   if (!isOpen) return null;
 
   const selectedUser = users.find((u) => u.id === memberId);
+
+  // Generate Combobox Options for Members
+  const memberOptions: ComboboxOption[] = [
+    ...users.map((u) => ({
+      value: u.id,
+      label: u.name,
+      icon: (
+        <span
+          className={`w-5 h-5 rounded-full ${u.avatar_color} text-white flex items-center justify-center text-[10px] font-bold`}
+        >
+          {u.avatar_initial}
+        </span>
+      ),
+      badge: u.role.toUpperCase(),
+      badgeColor: (u.role === 'admin' ? 'purple' : u.role === 'bendahara' ? 'blue' : 'slate') as any,
+      description: `${u.phone_number || 'Tanpa no. HP'} • Denda: Rp ${formatRupiah(u.unpaid_fine || 0)}`,
+    })),
+    {
+      value: 'non_member',
+      label: '+ Non-Anggota / Donatur / Sumber Lain',
+      icon: '👤',
+      badge: 'Eksternal',
+      badgeColor: 'slate',
+      description: 'Untuk donasi atau uang masuk dari luar anggota',
+    },
+  ];
 
   // Handle amount formatting with auto thousand dots
   const handleAmountChange = (raw: string) => {
@@ -107,7 +191,8 @@ export const KasMasukModal: React.FC<KasMasukModalProps> = ({
       if (category === 'iuran') defaultNote = `Setoran Iuran Kas - ${finalMemberName}`;
       else if (category === 'hutang') defaultNote = `Pelunasan Hutang/Pinjaman - ${finalMemberName}`;
       else if (category === 'denda') defaultNote = `Pembayaran Denda - ${finalMemberName}`;
-      else if (category === 'iuran_plus_denda') defaultNote = `Iuran Kas (Rp${formatRupiah(duesPortion)}) + Denda (Rp${formatRupiah(finePortion)}) - ${finalMemberName}`;
+      else if (category === 'iuran_plus_denda')
+        defaultNote = `Iuran Kas (Rp${formatRupiah(duesPortion)}) + Denda (Rp${formatRupiah(finePortion)}) - ${finalMemberName}`;
       else defaultNote = `Pemasukan Kas - ${finalMemberName}`;
     }
 
@@ -135,8 +220,8 @@ export const KasMasukModal: React.FC<KasMasukModalProps> = ({
               <ArrowDownLeft className="w-6 h-6 text-emerald-300" />
             </div>
             <div>
-              <h2 className="text-base font-bold font-heading">Catat Kas Masuk (Uang Masuk)</h2>
-              <p className="text-xs text-sky-100">Pencatatan langsung oleh Bendahara</p>
+              <h2 className="text-base font-bold font-heading">Catat Kas Masuk (Pemasukan)</h2>
+              <p className="text-xs text-sky-100">Pencatatan langsung setoran atau pelunasan</p>
             </div>
           </div>
           <button
@@ -157,69 +242,49 @@ export const KasMasukModal: React.FC<KasMasukModalProps> = ({
             </div>
           )}
 
-          {/* 1. Sumber Uang (Dari Siapa) */}
+          {/* 1. Searchable Combobox Sumber Uang */}
           <div className="space-y-1.5">
-            <label className="text-xs font-bold text-slate-700 flex items-center justify-between">
-              <span>Dari Siapa (Sumber Uang) <span className="text-rose-500">*</span></span>
-              {selectedUser && (
-                <span className="text-[11px] font-normal text-slate-500">
-                  {selectedUser.phone_number}
-                </span>
-              )}
-            </label>
-            <select
+            <SearchableCombobox
+              id="sumber-uang-combobox"
+              label="Dari Siapa (Sumber Uang / Anggota)"
+              required
+              options={memberOptions}
               value={memberId}
-              onChange={(e) => setMemberId(e.target.value)}
-              className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-300 rounded-xl text-sm font-medium text-slate-800 focus:bg-white focus:outline-hidden focus:ring-2 focus:ring-[#118EEA]"
-            >
-              {users.map((u) => (
-                <option key={u.id} value={u.id}>
-                  {u.name} ({u.role.toUpperCase()}) {u.is_credit_frozen ? '⚠️ [Kredit Dibekukan]' : ''}
-                </option>
-              ))}
-              <option value="non_member">+ Non-Anggota / Donatur Eksternal</option>
-            </select>
+              onChange={(val) => {
+                setMemberId(val);
+                setErrorMsg('');
+              }}
+              placeholder="Cari nama anggota atau donatur..."
+              searchPlaceholder="Ketik nama anggota..."
+            />
 
             {memberId === 'non_member' && (
               <input
                 type="text"
-                placeholder="Ketik Nama Donatur / Sumber Uang"
+                placeholder="Ketik Nama Donatur / Sumber Uang di sini..."
                 value={customName}
                 onChange={(e) => setCustomName(e.target.value)}
-                className="w-full px-3.5 py-2 bg-white border border-slate-300 rounded-xl text-xs text-slate-800 focus:outline-hidden focus:ring-2 focus:ring-[#118EEA] mt-2"
+                className="w-full px-3.5 py-2.5 bg-white border border-slate-300 rounded-xl text-xs text-slate-800 focus:outline-hidden focus:ring-2 focus:ring-[#118EEA] mt-2"
                 required
               />
             )}
           </div>
 
-          {/* 2. Kategori Masuk */}
+          {/* 2. Searchable Combobox Kategori Masuk */}
           <div className="space-y-1.5">
-            <label className="text-xs font-bold text-slate-700">
-              Kategori Uang Masuk <span className="text-rose-500">*</span>
-            </label>
-            <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
-              {[
-                { id: 'iuran', label: 'Bayar Iuran Kas', icon: '💰' },
-                { id: 'hutang', label: 'Bayar Hutang/Pinjaman', icon: '🤝' },
-                { id: 'denda', label: 'Bayar Denda', icon: '⚠️' },
-                { id: 'iuran_plus_denda', label: 'Iuran + Denda', icon: '⚡' },
-                { id: 'pemasukan_lain', label: 'Donasi / Lainnya', icon: '🎁' },
-              ].map((item) => (
-                <button
-                  key={item.id}
-                  type="button"
-                  onClick={() => setCategory(item.id as TransactionCategory)}
-                  className={`p-2.5 rounded-xl border text-left text-xs font-bold transition-all flex flex-col justify-between ${
-                    category === item.id
-                      ? 'border-[#118EEA] bg-[#E7F3FE] text-[#118EEA] shadow-xs ring-1 ring-[#118EEA]'
-                      : 'border-slate-200 bg-slate-50 hover:bg-slate-100 text-slate-700'
-                  }`}
-                >
-                  <span className="text-base mb-1">{item.icon}</span>
-                  <span className="leading-tight">{item.label}</span>
-                </button>
-              ))}
-            </div>
+            <SearchableCombobox
+              id="kategori-masuk-combobox"
+              label="Kategori Uang Masuk"
+              required
+              options={MASUK_CATEGORY_OPTIONS}
+              value={category}
+              onChange={(val) => {
+                setCategory(val as TransactionCategory);
+                setErrorMsg('');
+              }}
+              placeholder="Cari atau pilih kategori kas masuk..."
+              searchPlaceholder="Ketik kategori (iuran, hutang, denda, dll)..."
+            />
           </div>
 
           {/* 3. Input Nominal */}
@@ -302,7 +367,7 @@ export const KasMasukModal: React.FC<KasMasukModalProps> = ({
                   className={`py-2 px-2 rounded-xl border text-center text-xs font-bold transition-all ${
                     method === m.id
                       ? 'border-[#118EEA] bg-[#E7F3FE] text-[#118EEA]'
-                      : 'border-slate-200 bg-slate-50 text-slate-600'
+                      : 'border-slate-200 bg-slate-50 text-slate-600 hover:bg-slate-100'
                   }`}
                 >
                   {m.label}
@@ -327,7 +392,7 @@ export const KasMasukModal: React.FC<KasMasukModalProps> = ({
           <div className="pt-2">
             <button
               type="submit"
-              className="w-full py-3.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl font-bold text-sm shadow-md hover:shadow-lg transition-all flex items-center justify-center gap-2"
+              className="w-full py-3.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl font-bold text-sm shadow-md hover:shadow-lg transition-all flex items-center justify-center gap-2 cursor-pointer"
             >
               <CheckCircle2 className="w-5 h-5" />
               <span>Simpan & Tambah Kas Masuk</span>

@@ -1,24 +1,21 @@
 import React, { useState } from 'react';
 import { User } from '../types';
 import { AppState, calculateMemberStats, formatRupiah } from '../lib/storage';
+import { DeleteMemberConfirmModal } from './modals/DeleteMemberConfirmModal';
 import {
   Search,
   UserPlus,
   Phone,
   Instagram,
   MapPin,
-  ShieldCheck,
-  ShieldAlert,
   ArrowDownLeft,
   ArrowUpRight,
-  Settings2,
   Edit2,
   Trash2,
-  Filter,
-  CheckCircle,
-  AlertTriangle,
   Award,
   CreditCard,
+  Eye,
+  TrendingUp,
 } from 'lucide-react';
 
 interface MemberManagementModuleProps {
@@ -29,6 +26,7 @@ interface MemberManagementModuleProps {
   onOpenKasMasukWithMember: (user: User) => void;
   onOpenKasKeluarWithMember: (user: User) => void;
   onOpenManageCredit: (user: User) => void;
+  onOpenMemberDetail: (user: User) => void;
 }
 
 export const MemberManagementModule: React.FC<MemberManagementModuleProps> = ({
@@ -39,10 +37,12 @@ export const MemberManagementModule: React.FC<MemberManagementModuleProps> = ({
   onOpenKasMasukWithMember,
   onOpenKasKeluarWithMember,
   onOpenManageCredit,
+  onOpenMemberDetail,
 }) => {
   const [searchQuery, setSearchQuery] = useState('');
   const [filterType, setFilterType] = useState<'all' | 'has_debt' | 'frozen' | 'has_fine'>('all');
   const [sortBy, setSortBy] = useState<'name' | 'highest_contribution' | 'highest_debt' | 'compliance'>('highest_contribution');
+  const [memberToDelete, setMemberToDelete] = useState<User | null>(null);
 
   // Filter & Search
   const filteredUsers = state.users.filter((user) => {
@@ -80,13 +80,13 @@ export const MemberManagementModule: React.FC<MemberManagementModuleProps> = ({
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-white p-5 rounded-2xl border border-slate-200 shadow-xs">
         <div>
           <h2 className="text-base sm:text-lg font-bold text-[#2B2F38] font-heading flex items-center gap-2">
-            <span>Daftar Anggota & Statistik Realtime</span>
+            <span>Daftar Anggota & Rekam Jejak Keuangan</span>
             <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-[#E7F3FE] text-[#118EEA]">
               {state.users.length} Terdaftar
             </span>
           </h2>
           <p className="text-xs text-[#727986] mt-0.5">
-            Pencatatan kontribusi kas masuk, kredit pinjaman 20K, hutang, dan skor kepatuhan
+            Database real-time: Avatar 2 huruf, pemulihan kredit 3 hari, riwayat hutang, dan grafik diagram
           </p>
         </div>
 
@@ -197,17 +197,24 @@ export const MemberManagementModule: React.FC<MemberManagementModuleProps> = ({
               key={user.id}
               className="bg-white rounded-2xl border border-slate-200 p-5 space-y-4 hover:shadow-md transition-shadow relative overflow-hidden"
             >
-              {/* Card Header: Avatar, Name, Role & Compliance Badge */}
+              {/* Card Header: 2-Letter Avatar, Name, Role & Compliance Badge */}
               <div className="flex items-start justify-between gap-3">
                 <div className="flex items-center gap-3">
                   <div
-                    className={`w-12 h-12 rounded-2xl ${user.avatar_color} text-white flex items-center justify-center font-bold text-base font-heading shadow-xs shrink-0`}
+                    className={`w-12 h-12 rounded-2xl ${user.avatar_color} text-white flex items-center justify-center font-extrabold text-base font-heading shadow-xs shrink-0 cursor-pointer hover:opacity-90`}
+                    onClick={() => onOpenMemberDetail(user)}
+                    title="Klik untuk melihat detail & trackrecord lengkap"
                   >
                     {user.avatar_initial}
                   </div>
                   <div>
                     <div className="flex items-center gap-2 flex-wrap">
-                      <h3 className="text-sm font-bold text-slate-900 font-heading">{user.name}</h3>
+                      <h3
+                        className="text-sm font-bold text-slate-900 font-heading cursor-pointer hover:text-[#118EEA] transition-colors"
+                        onClick={() => onOpenMemberDetail(user)}
+                      >
+                        {user.name}
+                      </h3>
                       <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-slate-100 text-slate-700 uppercase">
                         {user.role}
                       </span>
@@ -280,29 +287,29 @@ export const MemberManagementModule: React.FC<MemberManagementModuleProps> = ({
                     Rp {formatRupiah(stats.masukPekanIni)}
                   </p>
                   <span className="text-[9px] text-sky-600 block">
-                    Bln ini: Rp {formatRupiah(stats.masukBulanIni)}
+                    Bln: Rp {formatRupiah(stats.masukBulanIni)}
                   </span>
                 </div>
 
-                {/* 3. Jatah Kredit & Sisa Tersedia */}
+                {/* 3. Sisa Limit Kredit (Berkurang saat pinjam, pulih 3 hari pasca lunas) */}
                 <div className="p-2.5 bg-slate-50 border border-slate-200 rounded-xl">
                   <div className="flex items-center justify-between">
-                    <span className="text-[10px] font-semibold text-slate-600">Jatah Kredit</span>
+                    <span className="text-[10px] font-semibold text-slate-600">Sisa Kredit</span>
                     {stats.isCreditFrozen ? (
                       <span className="text-[9px] font-extrabold text-rose-600">BEKU</span>
                     ) : (
                       <span className="text-[9px] font-extrabold text-emerald-600">AKTIF</span>
                     )}
                   </div>
-                  <p className="text-xs font-black text-slate-800 font-heading mt-0.5">
-                    Rp {formatRupiah(stats.plafonKredit)}
+                  <p className="text-xs font-black text-[#118EEA] font-heading mt-0.5">
+                    Rp {formatRupiah(user.credit_limit || 0)}
                   </p>
                   <span className="text-[9px] text-slate-500 block">
-                    Sisa: Rp {formatRupiah(stats.sisaKreditTersedia)}
+                    Plafon: Rp {formatRupiah(stats.plafonKredit)}
                   </span>
                 </div>
 
-                {/* 4. Hutang & Denda */}
+                {/* 4. Sisa Hutang Aktif */}
                 <div className={`p-2.5 rounded-xl border ${stats.sisaHutang > 0 ? 'bg-rose-50/80 border-rose-200' : 'bg-slate-50 border-slate-200'}`}>
                   <span className={`text-[10px] font-semibold block ${stats.sisaHutang > 0 ? 'text-rose-700' : 'text-slate-500'}`}>
                     Sisa Hutang
@@ -319,6 +326,17 @@ export const MemberManagementModule: React.FC<MemberManagementModuleProps> = ({
               {/* Card Bottom Actions */}
               <div className="pt-2 border-t border-slate-100 flex flex-wrap items-center justify-between gap-2">
                 <div className="flex items-center gap-1.5">
+                  {/* Trackrecord & Detail Button */}
+                  <button
+                    type="button"
+                    onClick={() => onOpenMemberDetail(user)}
+                    className="px-2.5 py-1.5 bg-[#E7F3FE] hover:bg-[#D0E7FC] text-[#118EEA] rounded-lg text-xs font-bold transition-colors flex items-center gap-1"
+                    title="Lihat riwayat transaksi, hutang, dan grafik kontribusi"
+                  >
+                    <TrendingUp className="w-3.5 h-3.5" />
+                    <span>Trackrecord</span>
+                  </button>
+
                   {/* + Kas Masuk */}
                   <button
                     type="button"
@@ -338,7 +356,7 @@ export const MemberManagementModule: React.FC<MemberManagementModuleProps> = ({
                     title="Cairkan pinjaman untuk anggota ini"
                   >
                     <ArrowUpRight className="w-3.5 h-3.5 text-rose-600" />
-                    <span>- Pinjamkan</span>
+                    <span>- Pinjam</span>
                   </button>
 
                   {/* Kelola Kredit Button */}
@@ -348,7 +366,7 @@ export const MemberManagementModule: React.FC<MemberManagementModuleProps> = ({
                     className="px-2.5 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg text-xs font-bold transition-colors flex items-center gap-1"
                     title="Ubah plafon kredit / bekukan"
                   >
-                    <CreditCard className="w-3.5 h-3.5 text-[#118EEA]" />
+                    <CreditCard className="w-3.5 h-3.5 text-slate-600" />
                     <span>Kredit</span>
                   </button>
                 </div>
@@ -364,12 +382,8 @@ export const MemberManagementModule: React.FC<MemberManagementModuleProps> = ({
                   </button>
                   <button
                     type="button"
-                    onClick={() => {
-                      if (window.confirm(`Hapus anggota "${user.name}" dari sistem kas tongkrongan?`)) {
-                        onDeleteMember(user.id);
-                      }
-                    }}
-                    className="p-1.5 hover:bg-rose-50 text-slate-400 hover:text-rose-600 rounded-lg transition-colors"
+                    onClick={() => setMemberToDelete(user)}
+                    className="p-1.5 hover:bg-rose-50 text-slate-400 hover:text-rose-600 rounded-lg transition-colors cursor-pointer"
                     title="Hapus Anggota"
                   >
                     <Trash2 className="w-3.5 h-3.5" />
@@ -380,6 +394,18 @@ export const MemberManagementModule: React.FC<MemberManagementModuleProps> = ({
           );
         })}
       </div>
+
+      {/* Popup Dialog Konfirmasi Hapus Anggota dengan Pengaman 3 Detik */}
+      <DeleteMemberConfirmModal
+        isOpen={!!memberToDelete}
+        onClose={() => setMemberToDelete(null)}
+        user={memberToDelete}
+        state={state}
+        onConfirmDelete={(userId) => {
+          onDeleteMember(userId);
+          setMemberToDelete(null);
+        }}
+      />
     </div>
   );
 };

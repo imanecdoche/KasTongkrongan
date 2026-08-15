@@ -21,13 +21,23 @@ export const ManageCreditModal: React.FC<ManageCreditModalProps> = ({
   user,
   onSave,
 }) => {
-  if (!isOpen || !user) return null;
+  const [creditLimit, setCreditLimit] = useState<number>(20000);
+  const [creditStr, setCreditStr] = useState<string>('20.000');
+  const [isFrozen, setIsFrozen] = useState<boolean>(false);
+  const [freezeReason, setFreezeReason] = useState<string>('');
+  const [fineStr, setFineStr] = useState<string>('0');
 
-  const [creditLimit, setCreditLimit] = useState<number>(user.credit_limit ?? 20000);
-  const [creditStr, setCreditStr] = useState<string>(formatRupiah(user.credit_limit ?? 20000));
-  const [isFrozen, setIsFrozen] = useState<boolean>(!!user.is_credit_frozen);
-  const [freezeReason, setFreezeReason] = useState<string>(user.freeze_reason || '');
-  const [fineStr, setFineStr] = useState<string>(formatRupiah(user.unpaid_fine || 0));
+  React.useEffect(() => {
+    if (user) {
+      setCreditLimit(user.credit_limit ?? 20000);
+      setCreditStr(formatRupiah(user.credit_limit ?? 20000));
+      setIsFrozen(!!user.is_credit_frozen);
+      setFreezeReason(user.freeze_reason || '');
+      setFineStr(formatRupiah(user.unpaid_fine || 0));
+    }
+  }, [user, isOpen]);
+
+  if (!isOpen || !user) return null;
 
   const handleCreditChange = (val: string) => {
     const num = parseRupiahInput(val);

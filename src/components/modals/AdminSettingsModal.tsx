@@ -21,8 +21,6 @@ export const AdminSettingsModal: React.FC<AdminSettingsModalProps> = ({
   onResetData,
   onOpenInstallPWA,
 }) => {
-  if (!isOpen) return null;
-
   const [treasurerName, setTreasurerName] = useState(config.treasurer_name);
   const [treasurerPhone, setTreasurerPhone] = useState(config.treasurer_phone);
   const [bankName, setBankName] = useState(config.treasurer_bank_name);
@@ -31,10 +29,23 @@ export const AdminSettingsModal: React.FC<AdminSettingsModalProps> = ({
   const [weeklyTargetStr, setWeeklyTargetStr] = useState(formatRupiah(config.weekly_target));
   const [defaultCreditStr, setDefaultCreditStr] = useState(formatRupiah(config.default_credit_limit || 20000));
   const [standalone, setStandalone] = useState(false);
+  const [showResetConfirm, setShowResetConfirm] = useState(false);
 
   useEffect(() => {
-    setStandalone(isStandalone());
-  }, []);
+    if (isOpen) {
+      setTreasurerName(config.treasurer_name);
+      setTreasurerPhone(config.treasurer_phone);
+      setBankName(config.treasurer_bank_name);
+      setAccountNumber(config.treasurer_account_number);
+      setEwallet(config.treasurer_ewallet);
+      setWeeklyTargetStr(formatRupiah(config.weekly_target));
+      setDefaultCreditStr(formatRupiah(config.default_credit_limit || 20000));
+      setStandalone(isStandalone());
+      setShowResetConfirm(false);
+    }
+  }, [config, isOpen]);
+
+  if (!isOpen) return null;
 
   const handleSave = (e: React.FormEvent) => {
     e.preventDefault();
@@ -190,24 +201,50 @@ export const AdminSettingsModal: React.FC<AdminSettingsModalProps> = ({
 
           {/* Danger Zone: Reset Data */}
           <div className="pt-2 border-t border-slate-200">
-            <div className="p-3 bg-rose-50 rounded-xl border border-rose-200 flex items-center justify-between">
-              <div>
-                <span className="text-xs font-bold text-rose-800 block">Kosongkan Semua Data</span>
-                <span className="text-[11px] text-rose-600">Reset transaksi & anggota</span>
+            {!showResetConfirm ? (
+              <div className="p-3 bg-rose-50 rounded-xl border border-rose-200 flex items-center justify-between">
+                <div>
+                  <span className="text-xs font-bold text-rose-800 block">Kosongkan Semua Data</span>
+                  <span className="text-[11px] text-rose-600">Reset transaksi & anggota</span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setShowResetConfirm(true)}
+                  className="px-3 py-1.5 bg-rose-600 hover:bg-rose-700 text-white rounded-lg text-xs font-bold transition-colors cursor-pointer"
+                >
+                  Reset Data
+                </button>
               </div>
-              <button
-                type="button"
-                onClick={() => {
-                  if (window.confirm('PERINGATAN: Seluruh data transaksi, anggota, dan catatan kas akan dihapus bersih. Lanjutkan?')) {
-                    onResetData();
-                    onClose();
-                  }
-                }}
-                className="px-3 py-1.5 bg-rose-600 hover:bg-rose-700 text-white rounded-lg text-xs font-bold transition-colors"
-              >
-                Reset Data
-              </button>
-            </div>
+            ) : (
+              <div className="p-3.5 bg-rose-100/90 rounded-xl border border-rose-300 space-y-2.5 animate-in fade-in">
+                <div className="flex items-start gap-2">
+                  <ShieldAlert className="w-4 h-4 text-rose-700 shrink-0 mt-0.5" />
+                  <p className="text-xs font-bold text-rose-900 leading-tight">
+                    PERINGATAN: Seluruh data transaksi, pinjaman, dan anggota akan dihapus bersih. Lanjutkan?
+                  </p>
+                </div>
+                <div className="flex items-center justify-end gap-2 pt-1">
+                  <button
+                    type="button"
+                    onClick={() => setShowResetConfirm(false)}
+                    className="px-3 py-1.5 bg-white text-slate-700 border border-slate-300 rounded-lg text-xs font-bold hover:bg-slate-50 cursor-pointer"
+                  >
+                    Batal
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      onResetData();
+                      setShowResetConfirm(false);
+                      onClose();
+                    }}
+                    className="px-3 py-1.5 bg-rose-600 hover:bg-rose-700 text-white rounded-lg text-xs font-bold transition-colors shadow-xs cursor-pointer"
+                  >
+                    Ya, Reset Bersih
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
 
           {/* Action Buttons */}
