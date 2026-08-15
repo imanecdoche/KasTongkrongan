@@ -68,6 +68,56 @@ const MONTH_NAMES = [
 
 const PIE_COLORS = ['#10B981', '#EF4444', '#118EEA', '#F59E0B', '#8B5CF6', '#EC4899', '#06B6D4', '#64748B'];
 
+// Helper format tanggal singkat TT/BB (contoh: 16/8)
+const formatShortDate = (dateStr: string | Date): string => {
+  const d = new Date(dateStr);
+  return `${d.getDate()}/${d.getMonth() + 1}`;
+};
+
+// Helper ambil nama depan saja
+const getFirstName = (fullName: string): string => {
+  if (!fullName) return '-';
+  return fullName.trim().split(/\s+/)[0];
+};
+
+// Helper metode transaksi: C (Tunai/Cash) atau T (Non-tunai/Transfer/QRIS)
+const getMethodCode = (method: string): string => {
+  const m = (method || '').toLowerCase();
+  if (m === 'cash' || m === 'tunai' || m.includes('cash') || m.includes('tunai')) {
+    return 'C';
+  }
+  return 'T';
+};
+
+// Helper format nominal singkat dengan suffix 'k' (contoh: 5.000 -> 5k, 5.500 -> 5,5k, 12.000 -> 12k, 12.250 -> 12,25k)
+const formatAmountK = (amount: number): string => {
+  const kVal = (amount || 0) / 1000;
+  const formatted = kVal.toLocaleString('id-ID', { maximumFractionDigits: 2 });
+  return `${formatted}k`;
+};
+
+// Helper nama kategori ringkas
+const getCategoryShortName = (cat: string): string => {
+  switch (cat) {
+    case 'iuran':
+      return 'Iuran';
+    case 'pinjaman_keluar':
+      return 'Pinjaman';
+    case 'konsumsi':
+      return 'Konsumsi';
+    case 'logistik':
+      return 'Logistik';
+    case 'denda':
+      return 'Denda';
+    case 'hutang':
+      return 'Pelunasan';
+    case 'lainnya':
+      return 'Lainnya';
+    default:
+      return cat.replace(/_/g, ' ');
+  }
+};
+
 export const ReportModule: React.FC<ReportModuleProps> = ({ state, onShowToast }) => {
   const reportRef = useRef<HTMLDivElement>(null);
 
@@ -482,29 +532,24 @@ export const ReportModule: React.FC<ReportModuleProps> = ({ state, onShowToast }
     text += `*📋 JURNAL MUTASI TRANSAKSI (${reportTransactions.length} ENTRI):*\n`;
     text += `\`\`\`\n`;
     text += `==============================================\n`;
-    text += `TGL    NAMA          KAT       MET     NOMINAL\n`;
+    text += `TGL    NAMA        KET           MET   NOMINAL\n`;
     text += `==============================================\n`;
 
     if (reportTransactions.length === 0) {
       text += `      Tidak ada transaksi pada periode ini    \n`;
     } else {
       reportTransactions.forEach((tx) => {
-        const txDate = new Date(tx.created_at);
-        const dateStr = `${String(txDate.getDate()).padStart(2, '0')}/${String(txDate.getMonth() + 1).padStart(2, '0')}`;
-        const nameStr = padR(tx.member_name || 'Kas', 13);
-        
-        let catShort = tx.category.replace(/_/g, ' ').toUpperCase();
-        if (catShort.length > 9) catShort = catShort.slice(0, 8) + '…';
-        const catStr = padR(catShort, 9);
-        
-        const metStr = padR(tx.method.toUpperCase(), 4);
-        const sign = tx.direction === 'masuk' ? '+' : '-';
-        const amtStr = padL(`${sign}${formatRupiah(tx.amount)}`, 11);
+        const dateStr = padR(formatShortDate(tx.created_at), 6);
+        const nameStr = padR(getFirstName(tx.member_name), 11);
+        const catStr = padR(getCategoryShortName(tx.category), 13);
+        const metStr = padR(getMethodCode(tx.method), 4);
+        const amtStr = padL(formatAmountK(tx.amount), 9);
 
-        text += `${dateStr}  ${nameStr} ${catStr} ${metStr} ${amtStr}\n`;
+        text += `${dateStr} ${nameStr} ${catStr}  ${metStr} ${amtStr}\n`;
       });
     }
     text += `==============================================\n`;
+    text += `* Catatan: C = Tunai, T = Non-Tunai\n`;
     text += `\`\`\`\n\n`;
 
     // 3. Member Detail / Status Table
@@ -809,8 +854,8 @@ export const ReportModule: React.FC<ReportModuleProps> = ({ state, onShowToast }
       <div
         ref={reportRef}
         id="printable-report"
-        className="bg-white rounded-2xl border border-slate-300 shadow-sm p-6 sm:p-8 space-y-6 text-slate-900"
-        style={{ minHeight: '600px', width: '100%' }}
+        className="bg-white rounded-2xl border border-slate-300 shadow-sm p-4 sm:p-8 space-y-6 text-slate-900 w-full overflow-hidden"
+        style={{ minHeight: '600px', width: '100%', maxWidth: '100%' }}
       >
         {/* Official Report Letterhead / Header */}
         <div className="border-b-2 border-slate-800 pb-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
@@ -1130,57 +1175,61 @@ export const ReportModule: React.FC<ReportModuleProps> = ({ state, onShowToast }
               Tidak ada transaksi pada periode yang dipilih.
             </div>
           ) : (
-            <div className="border border-slate-200 rounded-xl overflow-x-auto">
-              <table className="w-full text-left text-xs border-collapse min-w-[550px]">
+            <div className="border border-slate-200 rounded-xl overflow-hidden bg-white">
+              <table className="w-full text-left text-xs border-collapse table-fixed">
                 <thead>
                   <tr className="bg-slate-100 border-b border-slate-200 text-slate-600 font-bold">
-                    <th className="py-2.5 px-3">Tanggal</th>
-                    <th className="py-2.5 px-3">Nama Anggota</th>
-                    <th className="py-2.5 px-3">Kategori & Keterangan</th>
-                    <th className="py-2.5 px-3 text-center">Metode</th>
-                    <th className="py-2.5 px-3 text-right">Nominal</th>
+                    <th className="py-2 px-2 w-[14%] sm:w-[15%]">Tanggal</th>
+                    <th className="py-2 px-2 w-[24%] sm:w-[24%]">Nama</th>
+                    <th className="py-2 px-2 w-[30%] sm:w-[32%]">Ket</th>
+                    <th className="py-2 px-1 w-[10%] sm:w-[9%] text-center">Metode</th>
+                    <th className="py-2 px-2 w-[22%] sm:w-[20%] text-right">Nominal</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
                   {reportTransactions.map((tx) => {
                     const isMasuk = tx.direction === 'masuk';
-                    const txDate = new Date(tx.created_at);
+                    const dateShort = formatShortDate(tx.created_at);
+                    const firstName = getFirstName(tx.member_name);
+                    const methodCode = getMethodCode(tx.method);
+                    const catName = getCategoryShortName(tx.category);
+                    const amountShort = formatAmountK(tx.amount);
 
                     return (
                       <tr key={tx.id} className="hover:bg-slate-50/80 transition-colors">
-                        <td className="py-2.5 px-3 whitespace-nowrap text-slate-600 font-mono">
-                          {txDate.toLocaleDateString('id-ID', {
-                            day: 'numeric',
-                            month: 'short',
-                            year: 'numeric',
-                          })}
-                          <span className="block text-[10px] text-slate-400 font-mono">
-                            {txDate.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })}
-                          </span>
+                        <td className="py-2 px-2 whitespace-nowrap text-slate-600 font-mono text-[11px]">
+                          {dateShort}
                         </td>
-                        <td className="py-2.5 px-3 font-semibold text-slate-800">
-                          {tx.member_name}
+                        <td className="py-2 px-2 font-semibold text-slate-800 truncate text-[11px]" title={tx.member_name}>
+                          {firstName}
                         </td>
-                        <td className="py-2.5 px-3 text-slate-600 max-w-xs">
-                          <span className="font-medium text-slate-700 capitalize">
-                            {tx.category.replace(/_/g, ' ')}
+                        <td className="py-2 px-2 text-slate-600 truncate text-[11px]" title={tx.notes ? `${catName} (${tx.notes})` : catName}>
+                          <span className="font-medium text-slate-700">
+                            {catName}
                           </span>
                           {tx.notes && (
-                            <span className="block text-[11px] text-slate-400 truncate">{tx.notes}</span>
+                            <span className="text-[10px] text-slate-400 ml-1">({tx.notes})</span>
                           )}
                         </td>
-                        <td className="py-2.5 px-3 text-center">
-                          <span className="px-2 py-0.5 rounded-full text-[10px] font-bold uppercase bg-slate-100 text-slate-600 font-mono">
-                            {tx.method}
+                        <td className="py-2 px-1 text-center text-[11px]">
+                          <span
+                            className={`inline-block px-1.5 py-0.5 rounded font-mono font-bold text-[10px] ${
+                              methodCode === 'C'
+                                ? 'bg-amber-100 text-amber-800'
+                                : 'bg-blue-100 text-blue-800'
+                            }`}
+                            title={methodCode === 'C' ? 'Tunai / Cash' : 'Non-Tunai / Transfer / QRIS'}
+                          >
+                            {methodCode}
                           </span>
                         </td>
-                        <td className="py-2.5 px-3 text-right whitespace-nowrap font-mono">
+                        <td className="py-2 px-2 text-right whitespace-nowrap font-mono text-[11px]">
                           <span
                             className={`font-black ${
                               isMasuk ? 'text-emerald-600' : 'text-rose-600'
                             }`}
                           >
-                            {isMasuk ? '+' : '-'} Rp {formatRupiah(tx.amount)}
+                            {amountShort}
                           </span>
                         </td>
                       </tr>
@@ -1188,6 +1237,10 @@ export const ReportModule: React.FC<ReportModuleProps> = ({ state, onShowToast }
                   })}
                 </tbody>
               </table>
+              <div className="bg-slate-50 border-t border-slate-100 px-3 py-1.5 flex flex-wrap items-center justify-between text-[10px] text-slate-500 font-mono gap-1">
+                <span>* C: Tunai | T: Non-Tunai</span>
+                <span>* Hijau: Masuk | Merah: Keluar (satuan: k)</span>
+              </div>
             </div>
           )}
         </div>

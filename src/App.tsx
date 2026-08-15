@@ -466,29 +466,37 @@ export function App() {
     text += `*📋 JURNAL MUTASI TRANSAKSI TERAKHIR:*\n`;
     text += `\`\`\`\n`;
     text += `==============================================\n`;
-    text += `TGL    NAMA          KAT       MET     NOMINAL\n`;
+    text += `TGL    NAMA        KET           MET   NOMINAL\n`;
     text += `==============================================\n`;
 
     if (recentTx.length === 0) {
       text += `           Belum ada transaksi tercatat       \n`;
     } else {
       recentTx.forEach((tx) => {
-        const txDate = new Date(tx.created_at);
-        const dateStr = `${String(txDate.getDate()).padStart(2, '0')}/${String(txDate.getMonth() + 1).padStart(2, '0')}`;
-        const nameStr = padR(tx.member_name || 'Kas', 13);
+        const d = new Date(tx.created_at);
+        const dateStr = padR(`${d.getDate()}/${d.getMonth() + 1}`, 6);
+        const nameStr = padR((tx.member_name || 'Kas').trim().split(/\s+/)[0], 11);
         
-        let catShort = tx.category.replace(/_/g, ' ').toUpperCase();
-        if (catShort.length > 9) catShort = catShort.slice(0, 8) + '…';
-        const catStr = padR(catShort, 9);
+        let cat = tx.category.replace(/_/g, ' ');
+        if (cat === 'iuran') cat = 'Iuran';
+        else if (cat === 'pinjaman keluar') cat = 'Pinjaman';
+        else if (cat === 'konsumsi') cat = 'Konsumsi';
+        else if (cat === 'logistik') cat = 'Logistik';
+        else if (cat === 'denda') cat = 'Denda';
+        else if (cat === 'hutang') cat = 'Pelunasan';
+        const catStr = padR(cat, 13);
         
-        const metStr = padR(tx.method.toUpperCase(), 4);
-        const sign = tx.direction === 'masuk' ? '+' : '-';
-        const amtStr = padL(`${sign}${formatRupiah(tx.amount)}`, 11);
+        const m = (tx.method || '').toLowerCase();
+        const metStr = padR(m === 'cash' || m === 'tunai' || m.includes('cash') || m.includes('tunai') ? 'C' : 'T', 4);
+        
+        const kVal = (tx.amount || 0) / 1000;
+        const amtStr = padL(`${kVal.toLocaleString('id-ID', { maximumFractionDigits: 2 })}k`, 9);
 
-        text += `${dateStr}  ${nameStr} ${catStr} ${metStr} ${amtStr}\n`;
+        text += `${dateStr} ${nameStr} ${catStr}  ${metStr} ${amtStr}\n`;
       });
     }
     text += `==============================================\n`;
+    text += `* Catatan: C = Tunai, T = Non-Tunai\n`;
     text += `\`\`\`\n\n`;
 
     // 3. Status Anggota (Monospace)
