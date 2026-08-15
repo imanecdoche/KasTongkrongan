@@ -32,6 +32,10 @@ export const ReceiptModal: React.FC<ReceiptModalProps> = ({ isOpen, onClose, tra
         return 'Beli Konsumsi & Snack';
       case 'logistik':
         return 'Alat & Perlengkapan';
+      case 'alokasi_rab':
+        return 'Alokasi RAB Kegiatan';
+      case 'pengembalian_rab':
+        return 'Pengembalian Sisa RAB';
       case 'pengeluaran_lain':
         return 'Operasional Lainnya';
       default:

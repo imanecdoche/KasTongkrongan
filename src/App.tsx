@@ -7,6 +7,7 @@ import {
   TransactionCategory,
   PaymentMethod,
   CreditRestorationItem,
+  RABPlan,
 } from './types';
 import {
   getInitialState,
@@ -14,7 +15,9 @@ import {
   persistStateToDatabase,
   calculateFinancialSummary,
   calculateMemberStats,
+  calculateRABSummary,
   formatRupiah,
+  formatAmountK,
   getTwoLetterInitial,
   AVATAR_COLORS,
   AppState,
@@ -25,6 +28,7 @@ import { MemberManagementModule } from './components/MemberManagementModule';
 import { LoanManagementModule } from './components/LoanManagementModule';
 import { ActivityFeedModule } from './components/ActivityFeedModule';
 import { ReportModule } from './components/ReportModule';
+import { RABModule } from './components/RAB/RABModule';
 import { BottomNavbar, NavigationTab } from './components/BottomNavbar';
 
 // Modals
@@ -45,13 +49,24 @@ import {
   Users,
   Receipt,
   ChevronRight,
+  ChevronDown,
+  ChevronUp,
   Radio,
   Wifi,
+  Wrench,
+  Layers,
+  Plus,
+  Zap,
+  RotateCcw,
+  Sparkles,
 } from 'lucide-react';
 
 export function App() {
   const [state, setState] = useState<AppState>(getInitialState);
   const [activeTab, setActiveTab] = useState<NavigationTab>('beranda');
+
+  // Accordion Tools state
+  const [isToolsAccordionOpen, setIsToolsAccordionOpen] = useState(true);
 
   // Modal States
   const [isKasMasukOpen, setIsKasMasukOpen] = useState(false);
@@ -789,7 +804,70 @@ export function App() {
                 )}
               </div>
             </div>
+
+            {/* 3. ACCORDION TOOLS (ALAT & MODUL TONGKRONGAN) */}
+            <div className="w-full max-w-5xl mx-auto px-4 sm:px-6">
+              <div className="bg-white rounded-2xl border border-slate-200 shadow-xs overflow-hidden">
+                {/* Accordion Header Toggle */}
+                <button
+                  type="button"
+                  onClick={() => setIsToolsAccordionOpen(!isToolsAccordionOpen)}
+                  className="w-full p-4 sm:p-5 flex items-center justify-between bg-slate-900 text-white hover:bg-slate-800 transition-colors text-left font-mono"
+                >
+                  <div className="flex items-center gap-2.5">
+                    <div className="w-8 h-8 rounded-xl bg-amber-500/20 text-amber-400 flex items-center justify-center font-bold">
+                      <Wrench className="w-4 h-4" />
+                    </div>
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <h3 className="text-xs sm:text-sm font-bold tracking-tight">
+                          TOOLS: RANCANGAN ANGGARAN BIAYA (RAB)
+                        </h3>
+                        <span className="px-2 py-0.5 rounded-full text-[10px] font-extrabold bg-amber-400 text-slate-950">
+                          {state.rabs?.length || 0} Rencana
+                        </span>
+                      </div>
+                      <p className="text-[11px] text-slate-400 font-sans">
+                        Perencanaan biaya kegiatan (camping/bakar-bakar), eksekusi alokasi kas & ekspor mono
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-2">
+                    <span className="text-[11px] text-slate-400 hidden sm:inline">
+                      {isToolsAccordionOpen ? 'Tutup Panel' : 'Buka Panel'}
+                    </span>
+                    {isToolsAccordionOpen ? (
+                      <ChevronUp className="w-5 h-5 text-slate-400" />
+                    ) : (
+                      <ChevronDown className="w-5 h-5 text-slate-400" />
+                    )}
+                  </div>
+                </button>
+
+                {/* Accordion Body */}
+                {isToolsAccordionOpen && (
+                  <div className="p-4 sm:p-5 bg-slate-50/50 border-t border-slate-200 space-y-4">
+                    <RABModule
+                      state={state}
+                      onUpdateState={(next) => updateStateAndPersist(() => next)}
+                      onShowToast={showToast}
+                    />
+                  </div>
+                )}
+              </div>
+            </div>
           </>
+        )}
+
+        {activeTab === 'rab' && (
+          <div className="w-full max-w-5xl mx-auto px-4 sm:px-6 py-2">
+            <RABModule
+              state={state}
+              onUpdateState={(next) => updateStateAndPersist(() => next)}
+              onShowToast={showToast}
+            />
+          </div>
         )}
 
         {activeTab === 'anggota' && (
@@ -848,6 +926,7 @@ export function App() {
         onSelectTab={setActiveTab}
         membersCount={state.users.length}
         activeLoansCount={activeLoans.length}
+        rabCount={state.rabs?.length || 0}
       />
 
       {/* ------------------------------------------------------------- */}

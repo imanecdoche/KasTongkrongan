@@ -1,13 +1,14 @@
 import React from 'react';
-import { Home, Users, HandCoins, Receipt, FileText } from 'lucide-react';
+import { Home, Users, HandCoins, Receipt, FileText, Layers } from 'lucide-react';
 
-export type NavigationTab = 'beranda' | 'anggota' | 'pinjaman' | 'mutasi' | 'laporan';
+export type NavigationTab = 'beranda' | 'anggota' | 'pinjaman' | 'rab' | 'mutasi' | 'laporan';
 
 interface BottomNavbarProps {
   activeTab: NavigationTab;
   onSelectTab: (tab: NavigationTab) => void;
   membersCount: number;
   activeLoansCount: number;
+  rabCount?: number;
 }
 
 export const BottomNavbar: React.FC<BottomNavbarProps> = ({
@@ -15,6 +16,7 @@ export const BottomNavbar: React.FC<BottomNavbarProps> = ({
   onSelectTab,
   membersCount,
   activeLoansCount,
+  rabCount = 0,
 }) => {
   const tabs = [
     {
@@ -36,6 +38,13 @@ export const BottomNavbar: React.FC<BottomNavbarProps> = ({
       badgeColor: 'bg-rose-500',
     },
     {
+      id: 'rab' as NavigationTab,
+      label: 'RAB',
+      icon: Layers,
+      badge: rabCount > 0 ? rabCount : undefined,
+      badgeColor: 'bg-amber-500',
+    },
+    {
       id: 'mutasi' as NavigationTab,
       label: 'Buku Kas',
       icon: Receipt,
@@ -49,7 +58,7 @@ export const BottomNavbar: React.FC<BottomNavbarProps> = ({
 
   return (
     <nav className="fixed bottom-0 left-0 right-0 z-40 bg-white/95 backdrop-blur-md border-t border-slate-200 shadow-lg">
-      <div className="w-full max-w-lg mx-auto grid grid-cols-5 h-16">
+      <div className="w-full max-w-lg mx-auto grid grid-cols-6 h-16">
         {tabs.map((tab) => {
           const Icon = tab.icon;
           const isActive = activeTab === tab.id;
@@ -75,7 +84,7 @@ export const BottomNavbar: React.FC<BottomNavbarProps> = ({
                   </span>
                 )}
               </div>
-              <span className={`text-[11px] mt-1 font-medium ${isActive ? 'font-bold text-[#118EEA]' : ''}`}>
+              <span className={`text-[10px] sm:text-[11px] mt-1 font-medium ${isActive ? 'font-bold text-[#118EEA]' : ''}`}>
                 {tab.label}
               </span>
               {isActive && (
@@ -88,3 +97,4 @@ export const BottomNavbar: React.FC<BottomNavbarProps> = ({
     </nav>
   );
 };
+

@@ -18,6 +18,7 @@ const DEFAULT_STATE = {
   loans: [],
   transactions: [],
   credit_restorations: [],
+  rabs: [],
   config: {
     weekly_target: 20000,
     default_credit_limit: 20000,
@@ -44,6 +45,7 @@ function loadDatabase() {
           loans: parsed.loans || [],
           transactions: parsed.transactions || [],
           credit_restorations: parsed.credit_restorations || [],
+          rabs: parsed.rabs || [],
           config: parsed.config || DEFAULT_STATE.config,
           updated_at: parsed.updated_at || new Date().toISOString(),
         };

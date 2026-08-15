@@ -30,6 +30,8 @@ export type TransactionCategory =
   | 'pinjaman_keluar' // Pencairan Pinjaman ke Anggota
   | 'konsumsi' // Pengeluaran Konsumsi / Snack Tongkrongan
   | 'logistik' // Pembelian Alat / Perlengkapan Tongkrongan
+  | 'alokasi_rab' // Alokasi Dana Kas ke Rancangan Anggaran Biaya (RAB)
+  | 'pengembalian_rab' // Pengembalian Sisa Dana RAB ke Kas Utama
   | 'pengeluaran_lain'; // Pengeluaran Operasional Lainnya
 
 export type PaymentMethod = 'tunai' | 'qris' | 'transfer';
@@ -90,3 +92,40 @@ export interface SystemConfig {
   treasurer_account_number: string;
   treasurer_ewallet: string;
 }
+
+// -------------------------------------------------------------
+// Rancangan Anggaran Biaya (RAB) Types & Interfaces
+// -------------------------------------------------------------
+
+export type RABItemPriority = 'wajib' | 'sekunder' | 'opsional' | 'cadangan';
+
+export interface RABItem {
+  id: string;
+  name: string;
+  unit: string; // e.g. "buah", "potong", "lembar", "cm", "pack", "pcs", "liter", "paket", "set", "lusin", "kg", etc.
+  qty: number;
+  unit_price: number;
+  subtotal: number; // qty * unit_price
+  priority: RABItemPriority;
+  notes?: string;
+}
+
+export type RABStatus = 'draft' | 'dialokasikan' | 'selesai' | 'dibatalkan';
+
+export interface RABPlan {
+  id: string;
+  name: string; // Nama Rencana (e.g. "Camping Gunung Salak", "Bakar-Bakar Tahun Baru")
+  pic_name: string; // PJ (Penanggung Jawab)
+  pic_member_id?: string;
+  event_date: string; // Waktu pelaksanaan
+  location: string; // Tempat kegiatan
+  items: RABItem[];
+  total_budget: number; // Akumulasi subtotal seluruh item
+  allocated_amount: number; // Dana kas utama yang telah dialokasikan/dieksekusi
+  status: RABStatus;
+  notes?: string;
+  created_at: string;
+  updated_at?: string;
+  executed_at?: string;
+}
+

@@ -111,6 +111,12 @@ const getCategoryShortName = (cat: string): string => {
       return 'Denda';
     case 'hutang':
       return 'Pelunasan';
+    case 'alokasi_rab':
+      return 'Alokasi RAB';
+    case 'pengembalian_rab':
+      return 'Kembali RAB';
+    case 'iuran_plus_denda':
+      return 'Iuran+Denda';
     case 'lainnya':
       return 'Lainnya';
     default:

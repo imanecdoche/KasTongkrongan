@@ -53,6 +53,10 @@ export const ActivityFeedModule: React.FC<ActivityFeedModuleProps> = ({
         return 'Konsumsi / Snack';
       case 'logistik':
         return 'Alat & Logistik';
+      case 'alokasi_rab':
+        return 'Alokasi RAB Kegiatan';
+      case 'pengembalian_rab':
+        return 'Pengembalian Sisa RAB';
       case 'pengeluaran_lain':
         return 'Operasional Lain';
       default:

@@ -4,6 +4,9 @@ import {
   MemberLoan,
   SystemConfig,
   CreditRestorationItem,
+  RABPlan,
+  RABItem,
+  RABItemPriority,
 } from '../types';
 
 const STORAGE_KEY = 'kas_tongkrongan_v3_realtime_db';
@@ -14,6 +17,7 @@ export interface AppState {
   loans: MemberLoan[];
   transactions: Transaction[];
   credit_restorations?: CreditRestorationItem[];
+  rabs?: RABPlan[];
   config: SystemConfig;
   updated_at?: string;
 }
@@ -130,6 +134,7 @@ export function getInitialState(): AppState {
           loans: parsed.loans || [],
           transactions: parsed.transactions || [],
           credit_restorations: parsed.credit_restorations || [],
+          rabs: parsed.rabs || [],
           config: parsed.config || DEFAULT_CONFIG,
         });
       }
@@ -143,6 +148,7 @@ export function getInitialState(): AppState {
     loans: [],
     transactions: [],
     credit_restorations: [],
+    rabs: [],
     config: DEFAULT_CONFIG,
   };
 
@@ -461,3 +467,80 @@ export async function resetAppState(): Promise<AppState> {
   const fresh = getInitialState();
   return fresh;
 }
+
+/**
+ * Format nominal singkat dengan suffix 'k' (contoh: 5.000 -> 5k, 5.500 -> 5,5k, 12.000 -> 12k, 12.250 -> 12,25k)
+ */
+export function formatAmountK(amount: number): string {
+  const kVal = (amount || 0) / 1000;
+  const formatted = kVal.toLocaleString('id-ID', { maximumFractionDigits: 2 });
+  return `${formatted}k`;
+}
+
+export interface RABSummary {
+  totalBudget: number;
+  allocatedAmount: number;
+  remainingNeeded: number;
+  allocationPercentage: number;
+  totalItems: number;
+  priorityTotals: {
+    wajib: number;
+    sekunder: number;
+    opsional: number;
+    cadangan: number;
+  };
+  priorityCounts: {
+    wajib: number;
+    sekunder: number;
+    opsional: number;
+    cadangan: number;
+  };
+}
+
+/**
+ * Calculate financial breakdown & stats for an RAB plan
+ */
+export function calculateRABSummary(rab: RABPlan): RABSummary {
+  const items = rab.items || [];
+  let totalBudget = 0;
+  const priorityTotals = {
+    wajib: 0,
+    sekunder: 0,
+    opsional: 0,
+    cadangan: 0,
+  };
+  const priorityCounts = {
+    wajib: 0,
+    sekunder: 0,
+    opsional: 0,
+    cadangan: 0,
+  };
+
+  items.forEach((item) => {
+    const subtotal = (item.qty || 0) * (item.unit_price || 0);
+    totalBudget += subtotal;
+    const prio = item.priority || 'wajib';
+    if (priorityTotals[prio] !== undefined) {
+      priorityTotals[prio] += subtotal;
+      priorityCounts[prio] += 1;
+    } else {
+      priorityTotals.wajib += subtotal;
+      priorityCounts.wajib += 1;
+    }
+  });
+
+  const allocatedAmount = rab.allocated_amount || 0;
+  const remainingNeeded = Math.max(0, totalBudget - allocatedAmount);
+  const allocationPercentage = totalBudget > 0 ? Math.min(100, Math.round((allocatedAmount / totalBudget) * 100)) : 0;
+
+  return {
+    totalBudget,
+    allocatedAmount,
+    remainingNeeded,
+    allocationPercentage,
+    totalItems: items.length,
+    priorityTotals,
+    priorityCounts,
+  };
+}
+
