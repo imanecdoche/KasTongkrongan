@@ -1,7 +1,7 @@
 import React from 'react';
-import { Home, Users, HandCoins, Receipt } from 'lucide-react';
+import { Home, Users, HandCoins, Receipt, FileText } from 'lucide-react';
 
-export type NavigationTab = 'beranda' | 'anggota' | 'pinjaman' | 'mutasi';
+export type NavigationTab = 'beranda' | 'anggota' | 'pinjaman' | 'mutasi' | 'laporan';
 
 interface BottomNavbarProps {
   activeTab: NavigationTab;
@@ -40,11 +40,16 @@ export const BottomNavbar: React.FC<BottomNavbarProps> = ({
       label: 'Buku Kas',
       icon: Receipt,
     },
+    {
+      id: 'laporan' as NavigationTab,
+      label: 'Laporan',
+      icon: FileText,
+    },
   ];
 
   return (
     <nav className="fixed bottom-0 left-0 right-0 z-40 bg-white/95 backdrop-blur-md border-t border-slate-200 shadow-lg">
-      <div className="w-full max-w-lg mx-auto grid grid-cols-4 h-16">
+      <div className="w-full max-w-lg mx-auto grid grid-cols-5 h-16">
         {tabs.map((tab) => {
           const Icon = tab.icon;
           const isActive = activeTab === tab.id;

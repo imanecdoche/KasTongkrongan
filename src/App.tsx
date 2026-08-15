@@ -24,6 +24,7 @@ import { MainBalanceCard } from './components/MainBalanceCard';
 import { MemberManagementModule } from './components/MemberManagementModule';
 import { LoanManagementModule } from './components/LoanManagementModule';
 import { ActivityFeedModule } from './components/ActivityFeedModule';
+import { ReportModule } from './components/ReportModule';
 import { BottomNavbar, NavigationTab } from './components/BottomNavbar';
 
 // Modals
@@ -99,7 +100,7 @@ export function App() {
         setIsKasKeluarOpen(true);
       }
 
-      if (tab && ['beranda', 'anggota', 'pinjaman', 'mutasi'].includes(tab)) {
+      if (tab && ['beranda', 'anggota', 'pinjaman', 'mutasi', 'laporan'].includes(tab)) {
         setActiveTab(tab);
       }
     }
@@ -557,6 +558,7 @@ export function App() {
                 setIsKasKeluarOpen(true);
               }}
               onCopySummary={copyWhatsAppSummary}
+              onNavigateToReport={() => setActiveTab('laporan')}
             />
 
             {/* Quick Actions & Highlights */}
@@ -770,6 +772,13 @@ export function App() {
           <ActivityFeedModule
             transactions={state.transactions}
             onSelectTransaction={(tx) => setSelectedReceiptTx(tx)}
+          />
+        )}
+
+        {activeTab === 'laporan' && (
+          <ReportModule
+            state={state}
+            onShowToast={showToast}
           />
         )}
       </main>

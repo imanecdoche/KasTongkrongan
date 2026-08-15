@@ -10,6 +10,7 @@ import {
   Share2,
   Copy,
   Check,
+  FileText,
 } from 'lucide-react';
 
 interface MainBalanceCardProps {
@@ -24,6 +25,7 @@ interface MainBalanceCardProps {
   onOpenKasMasuk: () => void;
   onOpenKasKeluar: () => void;
   onCopySummary: () => void;
+  onNavigateToReport?: () => void;
 }
 
 export const MainBalanceCard: React.FC<MainBalanceCardProps> = ({
@@ -38,6 +40,7 @@ export const MainBalanceCard: React.FC<MainBalanceCardProps> = ({
   onOpenKasMasuk,
   onOpenKasKeluar,
   onCopySummary,
+  onNavigateToReport,
 }) => {
   const [copied, setCopied] = React.useState(false);
 
@@ -71,10 +74,22 @@ export const MainBalanceCard: React.FC<MainBalanceCardProps> = ({
             </div>
 
             <div className="flex items-center gap-2">
+              {onNavigateToReport && (
+                <button
+                  type="button"
+                  onClick={onNavigateToReport}
+                  className="px-3.5 py-2 bg-white/20 hover:bg-white/30 active:scale-95 text-white rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 backdrop-blur-xs border border-white/25 cursor-pointer shadow-xs"
+                  title="Buka Halaman Laporan & Ekspor"
+                >
+                  <FileText className="w-3.5 h-3.5 text-yellow-300" />
+                  <span>Lihat Laporan</span>
+                </button>
+              )}
+
               <button
                 type="button"
                 onClick={handleShare}
-                className="px-3.5 py-2 bg-white/15 hover:bg-white/25 active:scale-95 text-white rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 backdrop-blur-xs border border-white/20"
+                className="px-3.5 py-2 bg-white/15 hover:bg-white/25 active:scale-95 text-white rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 backdrop-blur-xs border border-white/20 cursor-pointer"
                 title="Salin Ringkasan Kas ke WhatsApp"
               >
                 {copied ? <Check className="w-3.5 h-3.5 text-emerald-300" /> : <Share2 className="w-3.5 h-3.5" />}
