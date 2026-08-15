@@ -1,0 +1,6 @@
+{
+  "name": "KasTongkrongan",
+  "description": "Aplikasi manajemen kas tongkrongan bergaya DANA E-Wallet dengan pencatatan iuran, dana talangan darurat, denda otomatis, dan pemilihan bendahara.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
