@@ -1,158 +1,181 @@
 import React from 'react';
+import { formatRupiah } from '../lib/storage';
 import {
-  QrCode,
-  ArrowUpRight,
   ArrowDownLeft,
-  Vote,
-  Play,
-  Wallet,
-  ShieldCheck,
-  AlertTriangle,
-  Info,
-  Clock,
+  ArrowUpRight,
+  TrendingUp,
+  TrendingDown,
+  HandCoins,
+  AlertCircle,
+  Share2,
+  Copy,
+  Check,
 } from 'lucide-react';
-import { SystemConfig } from '../types';
 
 interface MainBalanceCardProps {
-  totalKasKomunal: number;
-  availableBalance: number;
-  borrowedAmount: number;
-  totalPendingFines: number;
-  config: SystemConfig;
-  activeCycleName: string;
-  onOpenPaymentModal: () => void;
-  onOpenLoanModal: () => void;
-  onOpenVotingTab: () => void;
-  onOpenQRISModal: () => void;
-  onTriggerAudit: () => void;
+  saldoKasSaatIni: number;
+  totalKasMasuk: number;
+  totalKasKeluar: number;
+  totalMasukBulanIni: number;
+  totalKeluarBulanIni: number;
+  totalHutangBeredar: number;
+  totalDendaTercatat: number;
+  totalAnggota: number;
+  onOpenKasMasuk: () => void;
+  onOpenKasKeluar: () => void;
+  onCopySummary: () => void;
 }
 
 export const MainBalanceCard: React.FC<MainBalanceCardProps> = ({
-  totalKasKomunal,
-  availableBalance,
-  borrowedAmount,
-  totalPendingFines,
-  config,
-  activeCycleName,
-  onOpenPaymentModal,
-  onOpenLoanModal,
-  onOpenVotingTab,
-  onOpenQRISModal,
-  onTriggerAudit,
+  saldoKasSaatIni,
+  totalKasMasuk,
+  totalKasKeluar,
+  totalMasukBulanIni,
+  totalKeluarBulanIni,
+  totalHutangBeredar,
+  totalDendaTercatat,
+  totalAnggota,
+  onOpenKasMasuk,
+  onOpenKasKeluar,
+  onCopySummary,
 }) => {
+  const [copied, setCopied] = React.useState(false);
+
+  const handleShare = () => {
+    onCopySummary();
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  };
+
   return (
-    <div className="w-full max-w-4xl mx-auto -mt-3 px-4 sm:px-6">
-      {/* DANA Signature Blue Card */}
-      <div className="bg-[#118EEA] rounded-2xl p-5 sm:p-6 text-white border border-[#0B63C5] space-y-5">
-        {/* Top bar inside card */}
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <div className="w-7 h-7 rounded-lg bg-white/20 flex items-center justify-center">
-              <Wallet className="w-4 h-4 text-white" />
-            </div>
+    <section className="w-full max-w-5xl mx-auto px-4 sm:px-6 pt-4">
+      {/* Primary Card: DANA Signature Blue */}
+      <div className="bg-gradient-to-br from-[#118EEA] via-[#0D7DD4] to-[#085EAF] text-white p-6 sm:p-7 rounded-3xl shadow-xl shadow-[#118EEA]/20 relative overflow-hidden">
+        {/* Subtle decorative background circles */}
+        <div className="absolute -right-12 -top-12 w-48 h-48 rounded-full bg-white/10 blur-2xl pointer-events-none" />
+        <div className="absolute -left-12 -bottom-12 w-48 h-48 rounded-full bg-[#34C759]/10 blur-2xl pointer-events-none" />
+
+        <div className="relative z-10 space-y-6">
+          {/* Header Row */}
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
             <div>
-              <span className="text-xs font-bold tracking-wider text-blue-100 uppercase">KAS TONGKRONGAN</span>
-              <p className="text-[11px] text-blue-200">{activeCycleName}</p>
+              <span className="text-xs font-semibold uppercase tracking-wider text-sky-200">
+                Saldo Kas Tongkrongan (Realtime)
+              </span>
+              <div className="flex items-baseline gap-2 mt-1">
+                <span className="text-2xl sm:text-3xl font-extrabold text-sky-200 font-heading">Rp</span>
+                <span className="text-3xl sm:text-4xl lg:text-5xl font-black tracking-tight font-heading">
+                  {formatRupiah(saldoKasSaatIni)}
+                </span>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={handleShare}
+                className="px-3.5 py-2 bg-white/15 hover:bg-white/25 active:scale-95 text-white rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 backdrop-blur-xs border border-white/20"
+                title="Salin Ringkasan Kas ke WhatsApp"
+              >
+                {copied ? <Check className="w-3.5 h-3.5 text-emerald-300" /> : <Share2 className="w-3.5 h-3.5" />}
+                <span>{copied ? 'Tersalin!' : 'Bagikan ke WA'}</span>
+              </button>
             </div>
           </div>
 
-          <button
-            id="quick-qris-btn"
-            onClick={onOpenQRISModal}
-            className="flex items-center gap-1.5 px-3 py-1.5 bg-white text-[#118EEA] rounded-xl text-xs font-bold hover:bg-blue-50 transition-colors shadow-none"
-          >
-            <QrCode className="w-4 h-4" />
-            <span>QRIS Kas</span>
-          </button>
-        </div>
+          {/* TWO PRIMARY ACTION BUTTONS: KAS MASUK & KAS KELUAR */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2">
+            {/* 🟢 TOMBOL KAS MASUK */}
+            <button
+              type="button"
+              onClick={onOpenKasMasuk}
+              className="py-4 px-5 bg-emerald-600 hover:bg-emerald-500 active:scale-98 text-white rounded-2xl font-black text-base shadow-lg shadow-emerald-950/20 border border-emerald-400/40 transition-all flex items-center justify-center gap-3 group"
+            >
+              <div className="w-10 h-10 rounded-xl bg-white/20 group-hover:bg-white/30 flex items-center justify-center transition-colors">
+                <ArrowDownLeft className="w-6 h-6 text-emerald-100" />
+              </div>
+              <div className="text-left">
+                <span className="block text-base sm:text-lg font-black font-heading leading-tight">
+                  + Kas Masuk
+                </span>
+                <span className="block text-xs font-medium text-emerald-100">
+                  Iuran, Hutang, Denda & Donasi
+                </span>
+              </div>
+            </button>
 
-        {/* Main Balance Display */}
-        <div>
-          <span className="text-xs text-blue-100 font-medium">Total Saldo Kas Komunal</span>
-          <div className="flex items-baseline gap-2 mt-0.5">
-            <h1 className="text-3xl sm:text-4xl font-extrabold text-white tracking-tight font-heading">
-              Rp {totalKasKomunal.toLocaleString('id-ID')}
-            </h1>
+            {/* 🔴 TOMBOL KAS KELUAR */}
+            <button
+              type="button"
+              onClick={onOpenKasKeluar}
+              className="py-4 px-5 bg-rose-600 hover:bg-rose-500 active:scale-98 text-white rounded-2xl font-black text-base shadow-lg shadow-rose-950/20 border border-rose-400/40 transition-all flex items-center justify-center gap-3 group"
+            >
+              <div className="w-10 h-10 rounded-xl bg-white/20 group-hover:bg-white/30 flex items-center justify-center transition-colors">
+                <ArrowUpRight className="w-6 h-6 text-rose-100" />
+              </div>
+              <div className="text-left">
+                <span className="block text-base sm:text-lg font-black font-heading leading-tight">
+                  - Kas Keluar
+                </span>
+                <span className="block text-xs font-medium text-rose-100">
+                  Pinjaman Anggota & Operasional
+                </span>
+              </div>
+            </button>
           </div>
-          <p className="text-xs text-blue-100 mt-1">
-            Target Mingguan: <strong>Rp{config.weekly_target.toLocaleString('id-ID')}</strong> / orang • Periode 7 Hari
-          </p>
-        </div>
 
-        {/* Financial Breakdown Pills */}
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5 pt-1">
-          <div className="p-3 bg-[#0B63C5] rounded-xl border border-white/10 flex items-center justify-between">
-            <div>
-              <span className="text-[11px] text-blue-200">Saldo Tersedia (Pocket)</span>
-              <p className="text-sm font-bold text-white">Rp {availableBalance.toLocaleString('id-ID')}</p>
+          {/* Quick Metrics Strip */}
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 pt-2">
+            <div className="bg-white/10 backdrop-blur-xs p-3 rounded-xl border border-white/15">
+              <div className="flex items-center gap-1.5 text-xs text-sky-200">
+                <TrendingUp className="w-3.5 h-3.5 text-emerald-300" />
+                <span>Total Masuk</span>
+              </div>
+              <p className="text-sm font-bold mt-1 text-white font-heading">
+                Rp {formatRupiah(totalKasMasuk)}
+              </p>
+              <span className="text-[10px] text-sky-200/80 block">
+                30 hari: Rp {formatRupiah(totalMasukBulanIni)}
+              </span>
             </div>
-            <ShieldCheck className="w-4 h-4 text-emerald-300" />
+
+            <div className="bg-white/10 backdrop-blur-xs p-3 rounded-xl border border-white/15">
+              <div className="flex items-center gap-1.5 text-xs text-sky-200">
+                <TrendingDown className="w-3.5 h-3.5 text-rose-300" />
+                <span>Total Keluar</span>
+              </div>
+              <p className="text-sm font-bold mt-1 text-white font-heading">
+                Rp {formatRupiah(totalKasKeluar)}
+              </p>
+              <span className="text-[10px] text-sky-200/80 block">
+                30 hari: Rp {formatRupiah(totalKeluarBulanIni)}
+              </span>
+            </div>
+
+            <div className="bg-white/10 backdrop-blur-xs p-3 rounded-xl border border-white/15">
+              <div className="flex items-center gap-1.5 text-xs text-sky-200">
+                <HandCoins className="w-3.5 h-3.5 text-amber-300" />
+                <span>Piutang Pinjaman</span>
+              </div>
+              <p className="text-sm font-bold mt-1 text-white font-heading">
+                Rp {formatRupiah(totalHutangBeredar)}
+              </p>
+              <span className="text-[10px] text-amber-200/80 block">Di tangan anggota</span>
+            </div>
+
+            <div className="bg-white/10 backdrop-blur-xs p-3 rounded-xl border border-white/15">
+              <div className="flex items-center gap-1.5 text-xs text-sky-200">
+                <AlertCircle className="w-3.5 h-3.5 text-rose-300" />
+                <span>Denda Tertunda</span>
+              </div>
+              <p className="text-sm font-bold mt-1 text-white font-heading">
+                Rp {formatRupiah(totalDendaTercatat)}
+              </p>
+              <span className="text-[10px] text-rose-200/80 block">Akumulasi sanksi</span>
+            </div>
           </div>
-
-          <div className="p-3 bg-[#0B63C5] rounded-xl border border-white/10 flex items-center justify-between">
-            <div>
-              <span className="text-[11px] text-blue-200">Sedang Dipinjam Anggota</span>
-              <p className="text-sm font-bold text-amber-300">Rp {borrowedAmount.toLocaleString('id-ID')}</p>
-            </div>
-            <Clock className="w-4 h-4 text-amber-300" />
-          </div>
-
-          <div className="p-3 bg-[#0B63C5] rounded-xl border border-white/10 flex items-center justify-between">
-            <div>
-              <span className="text-[11px] text-blue-200">Denda Tertunggak</span>
-              <p className="text-sm font-bold text-rose-300">Rp {totalPendingFines.toLocaleString('id-ID')}</p>
-            </div>
-            <AlertTriangle className="w-4 h-4 text-rose-300" />
-          </div>
-        </div>
-
-        {/* Quick Actions (4 Core Actions) */}
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 pt-2 border-t border-white/15">
-          <button
-            id="quick-pay-dues-btn"
-            onClick={onOpenPaymentModal}
-            className="p-3 bg-white text-[#118EEA] hover:bg-blue-50 rounded-xl flex flex-col items-center justify-center gap-1.5 transition-colors group font-bold"
-          >
-            <div className="w-8 h-8 rounded-full bg-[#E7F3FE] flex items-center justify-center text-[#118EEA]">
-              <ArrowUpRight className="w-4 h-4" />
-            </div>
-            <span className="text-xs">Bayar Kas</span>
-          </button>
-
-          <button
-            id="quick-borrow-loan-btn"
-            onClick={onOpenLoanModal}
-            className="p-3 bg-white text-[#118EEA] hover:bg-blue-50 rounded-xl flex flex-col items-center justify-center gap-1.5 transition-colors group font-bold"
-          >
-            <div className="w-8 h-8 rounded-full bg-[#E7F3FE] flex items-center justify-center text-[#118EEA]">
-              <ArrowDownLeft className="w-4 h-4" />
-            </div>
-            <span className="text-xs">Pinjam Kas</span>
-          </button>
-
-          <button
-            id="quick-vote-btn"
-            onClick={onOpenVotingTab}
-            className="p-3 bg-white text-[#118EEA] hover:bg-blue-50 rounded-xl flex flex-col items-center justify-center gap-1.5 transition-colors group font-bold"
-          >
-            <div className="w-8 h-8 rounded-full bg-[#E7F3FE] flex items-center justify-center text-[#118EEA]">
-              <Vote className="w-4 h-4" />
-            </div>
-            <span className="text-xs">Voting Bendahara</span>
-          </button>
-
-          <button
-            id="quick-audit-fine-btn"
-            onClick={onTriggerAudit}
-            className="p-3 bg-white text-[#118EEA] hover:bg-blue-50 rounded-xl flex flex-col items-center justify-center gap-1.5 transition-colors group font-bold"
-          >
-            <div className="w-8 h-8 rounded-full bg-[#E7F3FE] flex items-center justify-center text-[#118EEA]">
-              <Play className="w-4 h-4 fill-current" />
-            </div>
-            <span className="text-xs">Audit & Denda</span>
-          </button>
         </div>
       </div>
-    </div>
+    </section>
   );
 };

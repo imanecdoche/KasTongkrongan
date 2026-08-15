@@ -1,6 +1,7 @@
 import React from 'react';
-import { X, CheckCircle2, AlertCircle, Clock, ShieldCheck, Share2, Copy, ArrowDownLeft, ArrowUpRight } from 'lucide-react';
+import { X, CheckCircle2, ShieldCheck, Copy, ArrowDownLeft, ArrowUpRight } from 'lucide-react';
 import { Transaction } from '../../types';
+import { formatRupiah } from '../../lib/storage';
 
 interface ReceiptModalProps {
   isOpen: boolean;
@@ -11,37 +12,42 @@ interface ReceiptModalProps {
 export const ReceiptModal: React.FC<ReceiptModalProps> = ({ isOpen, onClose, transaction }) => {
   if (!isOpen || !transaction) return null;
 
-  const isIncome = ['due_payment', 'loan_repayment', 'fine_payment'].includes(transaction.type);
+  const isIncome = transaction.direction === 'masuk';
 
-  const getTypeName = (type: string) => {
-    switch (type) {
-      case 'due_payment':
-        return 'Iuran Kas Mingguan';
-      case 'loan_disbursement':
-        return 'Pencairan Dana Talangan';
-      case 'loan_repayment':
-        return 'Pelunasan Dana Talangan';
-      case 'fine_payment':
-        return 'Pembayaran Denda Keterlambatan';
-      case 'pocket_allocation':
-        return 'Alokasi Antar Pocket Kas';
-      case 'expense':
-        return 'Pengeluaran Kas / Logistik';
+  const getCategoryName = (category: string) => {
+    switch (category) {
+      case 'iuran':
+        return 'Iuran Kas';
+      case 'hutang':
+        return 'Pelunasan Hutang/Pinjaman';
+      case 'denda':
+        return 'Pembayaran Denda';
+      case 'iuran_plus_denda':
+        return 'Iuran Kas + Denda';
+      case 'pemasukan_lain':
+        return 'Donasi / Pemasukan Lain';
+      case 'pinjaman_keluar':
+        return 'Pencairan Pinjaman ke Anggota';
+      case 'konsumsi':
+        return 'Beli Konsumsi & Snack';
+      case 'logistik':
+        return 'Alat & Perlengkapan';
+      case 'pengeluaran_lain':
+        return 'Operasional Lainnya';
       default:
-        return 'Transaksi Kas';
+        return category;
     }
   };
 
   const copyReceiptText = () => {
-    const text = `BUKTI TRANSAKSI KASTONGKRONGAN
+    const text = `BUKTI TRANSAKSI KAS TONGKRONGAN
 ID: ${transaction.id}
-Tipe: ${getTypeName(transaction.type)}
-Nama: ${transaction.user_name}
-Nominal: Rp${transaction.amount.toLocaleString('id-ID')}
+Aliran: ${isIncome ? 'KAS MASUK (+)' : 'KAS KELUAR (-)'}
+Kategori: ${getCategoryName(transaction.category)}
+Pihak Terkait: ${transaction.member_name}
+Nominal: Rp ${formatRupiah(transaction.amount)}
 Metode: ${transaction.method.toUpperCase()}
-Status: ${transaction.status.toUpperCase()}
-Tanggal: ${new Date(transaction.created_at).toLocaleString('id-ID')}
-Verifikator: ${transaction.verified_by || 'Sistem Kas'}
+Waktu: ${new Date(transaction.created_at).toLocaleString('id-ID')}
 Catatan: ${transaction.notes}`;
 
     navigator.clipboard.writeText(text);
@@ -49,11 +55,8 @@ Catatan: ${transaction.notes}`;
   };
 
   return (
-    <div id="receipt-modal-backdrop" className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/60 p-0 sm:p-4">
-      <div
-        id="receipt-modal-container"
-        className="w-full max-w-sm bg-white rounded-t-2xl sm:rounded-2xl max-h-[90vh] overflow-y-auto border border-slate-200"
-      >
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs p-4">
+      <div className="w-full max-w-sm bg-white rounded-2xl max-h-[90vh] overflow-y-auto border border-slate-200 shadow-2xl animate-in fade-in zoom-in-95 duration-200">
         {/* Header Bar */}
         <div className="bg-[#118EEA] px-5 py-4 text-white flex items-center justify-between">
           <div className="flex items-center gap-2">
@@ -73,18 +76,18 @@ Catatan: ${transaction.notes}`;
           <div className="text-center pb-2 border-b border-dashed border-slate-200">
             <div
               className={`w-12 h-12 rounded-full mx-auto flex items-center justify-center mb-2 ${
-                isIncome ? 'bg-emerald-100 text-emerald-600' : 'bg-blue-100 text-[#118EEA]'
+                isIncome ? 'bg-emerald-100 text-emerald-600' : 'bg-rose-100 text-rose-600'
               }`}
             >
               {isIncome ? <ArrowDownLeft className="w-6 h-6" /> : <ArrowUpRight className="w-6 h-6" />}
             </div>
-            <p className="text-xs text-[#727986] font-medium">{getTypeName(transaction.type)}</p>
+            <p className="text-xs text-[#727986] font-medium">{getCategoryName(transaction.category)}</p>
             <h2 className="text-2xl font-black text-[#2B2F38] mt-1 font-heading">
-              Rp{transaction.amount.toLocaleString('id-ID')}
+              {isIncome ? '+' : '-'} Rp {formatRupiah(transaction.amount)}
             </h2>
             <div className="mt-2 inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200">
               <CheckCircle2 className="w-3.5 h-3.5" />
-              <span>{transaction.status === 'verified' ? 'BERHASIL & TERVERIFIKASI' : transaction.status.toUpperCase()}</span>
+              <span>TERCATAT DI BUKU KAS</span>
             </div>
           </div>
 
@@ -95,37 +98,22 @@ Catatan: ${transaction.notes}`;
               <span className="font-mono font-medium text-[#2B2F38]">{transaction.id}</span>
             </div>
             <div className="flex justify-between py-1 border-b border-slate-100">
-              <span className="text-[#727986]">Nama Anggota</span>
-              <span className="font-semibold text-[#2B2F38]">{transaction.user_name}</span>
+              <span className="text-[#727986]">Pihak / Anggota</span>
+              <span className="font-semibold text-[#2B2F38]">{transaction.member_name}</span>
             </div>
             <div className="flex justify-between py-1 border-b border-slate-100">
               <span className="text-[#727986]">Metode Pembayaran</span>
               <span className="font-semibold text-[#2B2F38] uppercase">{transaction.method}</span>
             </div>
             <div className="flex justify-between py-1 border-b border-slate-100">
-              <span className="text-[#727986]">Waktu Transaksi</span>
-              <span className="text-[#2B2F38]">{new Date(transaction.created_at).toLocaleString('id-ID')}</span>
-            </div>
-            <div className="flex justify-between py-1 border-b border-slate-100">
-              <span className="text-[#727986]">Diverifikasi Oleh</span>
-              <span className="font-medium text-[#118EEA]">{transaction.verified_by || 'Sistem Kas'}</span>
+              <span className="text-[#727986]">Waktu Pencatatan</span>
+              <span className="text-[#2B2F38]">{new Date(transaction.created_at).toLocaleString('id-ID')} WIB</span>
             </div>
             <div className="py-1">
               <span className="text-[#727986] block mb-1">Catatan / Keterangan</span>
               <p className="p-2.5 bg-[#F5F6F8] rounded-lg text-slate-700 leading-relaxed border border-slate-200">
                 {transaction.notes}
               </p>
-            </div>
-          </div>
-
-          {/* Mini QR stamp */}
-          <div className="pt-2 flex items-center justify-between p-3 bg-slate-50 rounded-xl border border-slate-200">
-            <div>
-              <p className="text-[11px] font-bold text-[#2B2F38]">KasTongkrongan Digital Trust</p>
-              <p className="text-[10px] text-[#727986]">Tervalidasi di buku kas komunal</p>
-            </div>
-            <div className="w-9 h-9 border border-slate-800 bg-white p-1 flex items-center justify-center">
-              <div className="w-full h-full bg-slate-900" />
             </div>
           </div>
 

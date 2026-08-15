@@ -1,14 +1,13 @@
 import React, { useState } from 'react';
-import { X, Settings, Play, RefreshCw, Sliders, CheckCircle2, AlertTriangle, Save } from 'lucide-react';
 import { SystemConfig } from '../../types';
+import { formatRupiah, parseRupiahInput } from '../../lib/storage';
+import { X, Settings, RefreshCw, Save, ShieldAlert, Check } from 'lucide-react';
 
 interface AdminSettingsModalProps {
   isOpen: boolean;
   onClose: () => void;
   config: SystemConfig;
-  lastAuditDate: string;
   onSaveConfig: (newConfig: SystemConfig) => void;
-  onRunAuditEngine: () => { duesFinesAdded: number; loanFinesAdded: number; auditNotes: string[] };
   onResetData: () => void;
 }
 
@@ -16,241 +15,183 @@ export const AdminSettingsModal: React.FC<AdminSettingsModalProps> = ({
   isOpen,
   onClose,
   config,
-  lastAuditDate,
   onSaveConfig,
-  onRunAuditEngine,
   onResetData,
 }) => {
-  const [weeklyTarget, setWeeklyTarget] = useState(config.weekly_target);
-  const [dailyDuesFine, setDailyDuesFine] = useState(config.daily_dues_fine);
-  const [dailyLoanFine, setDailyLoanFine] = useState(config.daily_loan_fine);
-  const [treasurerName, setTreasurerName] = useState(config.treasurer_name);
-  const [treasurerBank, setTreasurerBank] = useState(config.treasurer_bank_name);
-  const [treasurerAccount, setTreasurerAccount] = useState(config.treasurer_account_number);
-  const [treasurerEwallet, setTreasurerEwallet] = useState(config.treasurer_ewallet);
-
-  const [auditResult, setAuditResult] = useState<{
-    duesFinesAdded: number;
-    loanFinesAdded: number;
-    auditNotes: string[];
-  } | null>(null);
-
   if (!isOpen) return null;
+
+  const [treasurerName, setTreasurerName] = useState(config.treasurer_name);
+  const [treasurerPhone, setTreasurerPhone] = useState(config.treasurer_phone);
+  const [bankName, setBankName] = useState(config.treasurer_bank_name);
+  const [accountNumber, setAccountNumber] = useState(config.treasurer_account_number);
+  const [ewallet, setEwallet] = useState(config.treasurer_ewallet);
+  const [weeklyTargetStr, setWeeklyTargetStr] = useState(formatRupiah(config.weekly_target));
+  const [defaultCreditStr, setDefaultCreditStr] = useState(formatRupiah(config.default_credit_limit || 20000));
 
   const handleSave = (e: React.FormEvent) => {
     e.preventDefault();
     onSaveConfig({
-      ...config,
-      weekly_target: Number(weeklyTarget),
-      daily_dues_fine: Number(dailyDuesFine),
-      daily_loan_fine: Number(dailyLoanFine),
       treasurer_name: treasurerName.trim(),
-      treasurer_bank_name: treasurerBank.trim(),
-      treasurer_account_number: treasurerAccount.trim(),
-      treasurer_ewallet: treasurerEwallet.trim(),
+      treasurer_phone: treasurerPhone.trim(),
+      treasurer_bank_name: bankName.trim(),
+      treasurer_account_number: accountNumber.trim(),
+      treasurer_ewallet: ewallet.trim(),
+      weekly_target: parseRupiahInput(weeklyTargetStr) || 20000,
+      default_credit_limit: parseRupiahInput(defaultCreditStr) || 20000,
     });
-    alert('Konfigurasi sistem berhasil disimpan!');
+    alert('Pengaturan kas berhasil disimpan!');
     onClose();
   };
 
-  const handleTriggerAudit = () => {
-    const res = onRunAuditEngine();
-    setAuditResult(res);
-  };
-
   return (
-    <div id="admin-modal-backdrop" className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/60 p-0 sm:p-4">
-      <div
-        id="admin-modal-container"
-        className="w-full max-w-lg bg-white rounded-t-2xl sm:rounded-2xl max-h-[90vh] overflow-y-auto border border-slate-200"
-      >
+    <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4 overflow-y-auto">
+      <div className="bg-white w-full max-w-md rounded-2xl shadow-2xl border border-slate-200 overflow-hidden my-6 animate-in fade-in zoom-in-95 duration-200">
         {/* Header */}
-        <div className="sticky top-0 bg-white px-5 py-4 border-b border-slate-100 flex items-center justify-between z-10">
-          <div className="flex items-center gap-2">
-            <div className="w-8 h-8 rounded-lg bg-[#E7F3FE] text-[#118EEA] flex items-center justify-center">
-              <Sliders className="w-4 h-4" />
+        <div className="bg-[#118EEA] px-6 py-4 text-white flex items-center justify-between">
+          <div className="flex items-center gap-2.5">
+            <div className="w-8 h-8 rounded-xl bg-white/20 flex items-center justify-center text-white">
+              <Settings className="w-5 h-5" />
             </div>
             <div>
-              <h3 className="text-base font-bold text-[#2B2F38] font-heading">Pengaturan Sistem & Parameter</h3>
-              <p className="text-xs text-[#727986]">Konfigurasi aturan finansial tongkrongan</p>
+              <h2 className="text-base font-bold font-heading">Pengaturan Kas Tongkrongan</h2>
+              <p className="text-xs text-sky-100">Profil Bendahara & Rekening</p>
             </div>
           </div>
           <button
+            type="button"
             onClick={onClose}
-            className="w-8 h-8 flex items-center justify-center rounded-full bg-slate-100 text-slate-500 hover:bg-slate-200 transition-colors"
+            className="w-8 h-8 rounded-full bg-white/10 hover:bg-white/20 text-white flex items-center justify-center transition-colors"
           >
-            <X className="w-4 h-4" />
+            <X className="w-5 h-5" />
           </button>
         </div>
 
-        <div className="p-5 space-y-5">
-          {/* Automated Daily Cron Worker Simulator (FR-3.4 & FR-4.4) */}
-          <div className="p-4 bg-[#F5F6F8] rounded-xl border border-slate-200 space-y-3">
-            <div className="flex items-center justify-between">
-              <div>
-                <h4 className="text-xs font-bold text-[#2B2F38]">Automated Daily Cron Worker (00:01 WIB)</h4>
-                <p className="text-[11px] text-[#727986]">
-                  Audit harian denda iuran (Rp{config.daily_dues_fine}/hari) & denda pinjaman (Rp{config.daily_loan_fine}/hari)
-                </p>
-              </div>
-              <button
-                type="button"
-                id="run-daily-audit-btn"
-                onClick={handleTriggerAudit}
-                className="px-3 py-2 bg-[#118EEA] hover:bg-[#0B63C5] text-white text-xs font-bold rounded-lg flex items-center gap-1.5 transition-colors shrink-0"
-              >
-                <Play className="w-3.5 h-3.5 fill-current" />
-                <span>Jalankan Audit Sekarang</span>
-              </button>
-            </div>
-
-            {auditResult && (
-              <div className="p-3 bg-white rounded-lg border border-slate-200 text-xs space-y-1.5">
-                <div className="flex items-center gap-1.5 text-emerald-700 font-semibold">
-                  <CheckCircle2 className="w-4 h-4" />
-                  <span>Audit Harian Selesai Diproses:</span>
-                </div>
-                <div className="text-[#2B2F38] space-y-1 pl-5">
-                  <p>• Denda Iuran Ditambahkan: Rp{auditResult.duesFinesAdded.toLocaleString('id-ID')}</p>
-                  <p>• Denda Pinjaman Ditambahkan: Rp{auditResult.loanFinesAdded.toLocaleString('id-ID')}</p>
-                  {auditResult.auditNotes.map((note, idx) => (
-                    <p key={idx} className="text-[#727986] text-[11px]">• {note}</p>
-                  ))}
-                </div>
-              </div>
-            )}
-            <p className="text-[10px] text-[#727986]">
-              Terakhir diaudit: {new Date(lastAuditDate).toLocaleString('id-ID')}
-            </p>
+        {/* Form */}
+        <form onSubmit={handleSave} className="p-6 space-y-4">
+          <div className="space-y-1">
+            <label className="text-xs font-bold text-slate-700">Nama Bendahara / Pengelola</label>
+            <input
+              type="text"
+              value={treasurerName}
+              onChange={(e) => setTreasurerName(e.target.value)}
+              className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-300 rounded-xl text-xs text-slate-800 focus:bg-white focus:outline-hidden focus:ring-2 focus:ring-[#118EEA]"
+              required
+            />
           </div>
 
-          <form onSubmit={handleSave} className="space-y-4">
-            <h4 className="text-xs font-bold text-[#2B2F38] uppercase tracking-wider text-slate-500">
-              Parameter Finansial (PRD Section 3)
-            </h4>
+          <div className="space-y-1">
+            <label className="text-xs font-bold text-slate-700">Nomor HP / WhatsApp Bendahara</label>
+            <input
+              type="text"
+              value={treasurerPhone}
+              onChange={(e) => setTreasurerPhone(e.target.value)}
+              className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-300 rounded-xl text-xs text-slate-800 focus:bg-white focus:outline-hidden focus:ring-2 focus:ring-[#118EEA]"
+              required
+            />
+          </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-              <div>
-                <label className="block text-xs font-semibold text-[#2B2F38] mb-1">Target Iuran Mingguan</label>
-                <input
-                  type="number"
-                  step="5000"
-                  value={weeklyTarget}
-                  onChange={(e) => setWeeklyTarget(Number(e.target.value))}
-                  className="w-full px-3 py-2 bg-white border border-slate-300 rounded-xl text-xs font-bold text-[#2B2F38] focus:border-[#118EEA] focus:outline-none"
-                  required
-                />
-              </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-1">
+              <label className="text-xs font-bold text-slate-700">Bank Transfer</label>
+              <input
+                type="text"
+                value={bankName}
+                onChange={(e) => setBankName(e.target.value)}
+                placeholder="Bank BCA / Mandiri"
+                className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-xs text-slate-800 focus:outline-hidden focus:ring-2 focus:ring-[#118EEA]"
+              />
+            </div>
+            <div className="space-y-1">
+              <label className="text-xs font-bold text-slate-700">No. Rekening Bank</label>
+              <input
+                type="text"
+                value={accountNumber}
+                onChange={(e) => setAccountNumber(e.target.value)}
+                placeholder="1234567890"
+                className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-xs text-slate-800 focus:outline-hidden focus:ring-2 focus:ring-[#118EEA]"
+              />
+            </div>
+          </div>
 
-              <div>
-                <label className="block text-xs font-semibold text-[#2B2F38] mb-1">Denda Iuran / Hari</label>
-                <input
-                  type="number"
-                  step="100"
-                  value={dailyDuesFine}
-                  onChange={(e) => setDailyDuesFine(Number(e.target.value))}
-                  className="w-full px-3 py-2 bg-white border border-slate-300 rounded-xl text-xs font-bold text-rose-600 focus:border-[#118EEA] focus:outline-none"
-                  required
-                />
-              </div>
+          <div className="space-y-1">
+            <label className="text-xs font-bold text-slate-700">E-Wallet DANA / GoPay</label>
+            <input
+              type="text"
+              value={ewallet}
+              onChange={(e) => setEwallet(e.target.value)}
+              placeholder="DANA (08xx-xxxx-xxxx)"
+              className="w-full px-3.5 py-2 bg-slate-50 border border-slate-300 rounded-xl text-xs text-slate-800 focus:bg-white focus:outline-hidden focus:ring-2 focus:ring-[#118EEA]"
+            />
+          </div>
 
-              <div>
-                <label className="block text-xs font-semibold text-[#2B2F38] mb-1">Denda Pinjaman / Hari</label>
+          <div className="grid grid-cols-2 gap-3 pt-1">
+            <div className="space-y-1">
+              <label className="text-xs font-bold text-slate-700">Iuran Mingguan Standar</label>
+              <div className="relative">
+                <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-xs font-bold text-slate-500">Rp</span>
                 <input
-                  type="number"
-                  step="500"
-                  value={dailyLoanFine}
-                  onChange={(e) => setDailyLoanFine(Number(e.target.value))}
-                  className="w-full px-3 py-2 bg-white border border-slate-300 rounded-xl text-xs font-bold text-rose-600 focus:border-[#118EEA] focus:outline-none"
-                  required
+                  type="text"
+                  value={weeklyTargetStr}
+                  onChange={(e) => setWeeklyTargetStr(formatRupiah(parseRupiahInput(e.target.value)))}
+                  className="w-full pl-8 pr-2.5 py-2 bg-slate-50 border border-slate-300 rounded-xl text-xs font-bold text-right focus:outline-hidden focus:ring-2 focus:ring-[#118EEA]"
                 />
               </div>
             </div>
 
-            <h4 className="text-xs font-bold text-[#2B2F38] uppercase tracking-wider text-slate-500 pt-2">
-              Rekening & E-Wallet Bendahara
-            </h4>
-
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              <div>
-                <label className="block text-xs font-semibold text-[#2B2F38] mb-1">Nama Bendahara Terpilih</label>
+            <div className="space-y-1">
+              <label className="text-xs font-bold text-slate-700">Default Plafon Kredit (20K)</label>
+              <div className="relative">
+                <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-xs font-bold text-slate-500">Rp</span>
                 <input
                   type="text"
-                  value={treasurerName}
-                  onChange={(e) => setTreasurerName(e.target.value)}
-                  className="w-full px-3 py-2 bg-white border border-slate-300 rounded-xl text-xs text-[#2B2F38] focus:border-[#118EEA] focus:outline-none"
-                  required
-                />
-              </div>
-
-              <div>
-                <label className="block text-xs font-semibold text-[#2B2F38] mb-1">Bank Resmi</label>
-                <input
-                  type="text"
-                  value={treasurerBank}
-                  onChange={(e) => setTreasurerBank(e.target.value)}
-                  className="w-full px-3 py-2 bg-white border border-slate-300 rounded-xl text-xs text-[#2B2F38] focus:border-[#118EEA] focus:outline-none"
-                  required
-                />
-              </div>
-
-              <div>
-                <label className="block text-xs font-semibold text-[#2B2F38] mb-1">Nomor Rekening</label>
-                <input
-                  type="text"
-                  value={treasurerAccount}
-                  onChange={(e) => setTreasurerAccount(e.target.value)}
-                  className="w-full px-3 py-2 bg-white border border-slate-300 rounded-xl text-xs text-[#2B2F38] focus:border-[#118EEA] focus:outline-none"
-                  required
-                />
-              </div>
-
-              <div>
-                <label className="block text-xs font-semibold text-[#2B2F38] mb-1">E-Wallet Info</label>
-                <input
-                  type="text"
-                  value={treasurerEwallet}
-                  onChange={(e) => setTreasurerEwallet(e.target.value)}
-                  className="w-full px-3 py-2 bg-white border border-slate-300 rounded-xl text-xs text-[#2B2F38] focus:border-[#118EEA] focus:outline-none"
-                  required
+                  value={defaultCreditStr}
+                  onChange={(e) => setDefaultCreditStr(formatRupiah(parseRupiahInput(e.target.value)))}
+                  className="w-full pl-8 pr-2.5 py-2 bg-slate-50 border border-slate-300 rounded-xl text-xs font-bold text-right focus:outline-hidden focus:ring-2 focus:ring-[#118EEA]"
                 />
               </div>
             </div>
+          </div>
 
-            <div className="pt-3 flex items-center justify-between border-t border-slate-100">
+          {/* Danger Zone: Reset Data */}
+          <div className="pt-2 border-t border-slate-200">
+            <div className="p-3 bg-rose-50 rounded-xl border border-rose-200 flex items-center justify-between">
+              <div>
+                <span className="text-xs font-bold text-rose-800 block">Kosongkan Semua Data</span>
+                <span className="text-[11px] text-rose-600">Reset transaksi & anggota</span>
+              </div>
               <button
                 type="button"
                 onClick={() => {
-                  if (confirm('Reset semua data ke kondisi simulasi awal?')) {
+                  if (window.confirm('PERINGATAN: Seluruh data transaksi, anggota, dan catatan kas akan dihapus bersih. Lanjutkan?')) {
                     onResetData();
                     onClose();
                   }
                 }}
-                className="px-3 py-2 border border-slate-300 rounded-xl text-xs font-semibold text-rose-600 hover:bg-rose-50 flex items-center gap-1.5 transition-colors"
+                className="px-3 py-1.5 bg-rose-600 hover:bg-rose-700 text-white rounded-lg text-xs font-bold transition-colors"
               >
-                <RefreshCw className="w-3.5 h-3.5" />
-                <span>Reset Demo Data</span>
+                Reset Data
               </button>
-
-              <div className="flex gap-2">
-                <button
-                  type="button"
-                  onClick={onClose}
-                  className="px-4 py-2 rounded-xl border border-slate-300 text-slate-700 text-xs font-semibold hover:bg-slate-50 transition-colors"
-                >
-                  Batal
-                </button>
-                <button
-                  type="submit"
-                  className="px-4 py-2 rounded-xl bg-[#118EEA] hover:bg-[#0B63C5] text-white text-xs font-bold flex items-center gap-1.5 transition-colors"
-                >
-                  <Save className="w-3.5 h-3.5" />
-                  <span>Simpan Perubahan</span>
-                </button>
-              </div>
             </div>
-          </form>
-        </div>
+          </div>
+
+          {/* Action Buttons */}
+          <div className="pt-2 flex gap-2">
+            <button
+              type="button"
+              onClick={onClose}
+              className="flex-1 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-bold transition-colors"
+            >
+              Batal
+            </button>
+            <button
+              type="submit"
+              className="flex-1 py-2.5 bg-[#118EEA] hover:bg-[#0B63C5] text-white rounded-xl text-xs font-bold transition-colors flex items-center justify-center gap-1.5"
+            >
+              <Save className="w-4 h-4" />
+              <span>Simpan Pengaturan</span>
+            </button>
+          </div>
+        </form>
       </div>
     </div>
   );

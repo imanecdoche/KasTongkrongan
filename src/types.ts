@@ -10,140 +10,70 @@ export interface User {
   avatar_initial: string;
   avatar_color: string;
   created_at?: string;
+  joined_at?: string;
+
+  // Credit & Loan Control by Treasurer
+  credit_limit: number; // default Rp 20.000 (20K)
+  is_credit_frozen: boolean; // default false
+  freeze_reason?: string;
+  unpaid_fine: number; // Denda yang belum dibayar
 }
 
-export interface DuesCycle {
-  id: string;
-  cycle_name: string;
-  target_amount: number;
-  start_date: string;
-  end_date: string;
-  is_active: boolean;
-}
+export type TransactionDirection = 'masuk' | 'keluar';
 
-export type DuesStatus = 'unpaid' | 'partial' | 'paid' | 'overdue';
+export type TransactionCategory =
+  | 'iuran' // Bayar Iuran Kas
+  | 'hutang' // Bayar Hutang / Pelunasan Pinjaman
+  | 'denda' // Bayar Denda
+  | 'iuran_plus_denda' // Bayar Iuran + Denda
+  | 'pemasukan_lain' // Donasi / Pemasukan Lainnya
+  | 'pinjaman_keluar' // Pencairan Pinjaman ke Anggota
+  | 'konsumsi' // Pengeluaran Konsumsi / Snack Tongkrongan
+  | 'logistik' // Pembelian Alat / Perlengkapan Tongkrongan
+  | 'pengeluaran_lain'; // Pengeluaran Operasional Lainnya
 
-export interface DuesRecord {
-  id: string;
-  cycle_id: string;
-  user_id: string;
-  user_name: string;
-  amount_paid: number;
-  target_amount: number;
-  status: DuesStatus;
-  fine_amount: number;
-  days_late: number;
-  last_updated: string;
-}
-
-export type LoanStatus = 'pending' | 'approved' | 'rejected' | 'paid' | 'defaulted';
-
-export interface Loan {
-  id: string;
-  user_id: string;
-  user_name: string;
-  amount: number;
-  reason: string;
-  status: LoanStatus;
-  request_date: string;
-  approved_date?: string;
-  due_date: string;
-  fine_amount: number;
-  days_overdue: number;
-  approved_by?: string;
-  repaid_date?: string;
-  payment_proof_url?: string;
-  notes?: string;
-}
-
-export type TransactionType =
-  | 'due_payment'
-  | 'loan_disbursement'
-  | 'loan_repayment'
-  | 'fine_payment'
-  | 'pocket_allocation'
-  | 'expense';
-
-export type PaymentMethod = 'qris' | 'transfer' | 'tunai';
-export type TransactionStatus = 'verified' | 'pending' | 'rejected';
+export type PaymentMethod = 'tunai' | 'qris' | 'transfer';
 
 export interface Transaction {
   id: string;
-  type: TransactionType;
+  direction: TransactionDirection; // 'masuk' | 'keluar'
+  category: TransactionCategory;
   amount: number;
-  user_id: string;
-  user_name: string;
+  dues_portion?: number; // portion for iuran if combined
+  fine_portion?: number; // portion for fine if combined
+  member_id?: string;
+  member_name: string;
   method: PaymentMethod;
-  proof_url?: string;
-  status: TransactionStatus;
   notes: string;
-  verified_by?: string;
   created_at: string;
-  pocket_id?: string;
-  cycle_id?: string;
+  proof_url?: string;
   loan_id?: string;
 }
 
-export interface Pocket {
-  id: string;
-  name: string;
-  target_amount: number;
-  current_balance: number;
-  description: string;
-  tag: string;
-}
+export type LoanStatus = 'active' | 'paid' | 'overdue';
 
-export interface PsychTestScores {
-  kejujuran: number; // 1-100
-  ketegasan: number; // 1-100
-  ketelitian: number; // 1-100
-  pengambilan_keputusan: number; // 1-100
-  komitmen: number; // 1-100
-}
-
-export interface Candidate {
+export interface MemberLoan {
   id: string;
-  user_id: string;
-  user_name: string;
-  vision_mission: string;
-  scores: PsychTestScores;
-  answers: {
-    question_1: string;
-    question_2: string;
-    question_3: string;
-    question_4: string;
-    question_5: string;
-  };
-  votes_count: number;
-}
-
-export interface VoteRecord {
-  id: string;
-  election_id: string;
-  user_id: string;
-  candidate_id: string;
-  voted_at: string;
-}
-
-export interface Election {
-  id: string;
-  title: string;
-  status: 'open' | 'closed';
-  start_date: string;
-  end_date: string;
-  candidates: Candidate[];
-  winner_id?: string;
+  member_id: string;
+  member_name: string;
+  amount: number;
+  remaining_amount: number;
+  fine_amount?: number;
+  borrowed_at?: string;
+  due_date: string;
+  status: LoanStatus;
+  notes: string;
+  repaid_at?: string;
+  created_at?: string;
 }
 
 export interface SystemConfig {
   weekly_target: number;
-  daily_dues_fine: number;
-  daily_loan_fine: number;
-  loan_max_multiplier: number;
-  loan_term_days: number;
+  default_credit_limit: number; // 20000
+  due_day?: string;
   treasurer_name: string;
-  treasurer_ewallet: string;
-  treasurer_account_number: string;
-  treasurer_bank_name: string;
   treasurer_phone: string;
+  treasurer_bank_name: string;
+  treasurer_account_number: string;
+  treasurer_ewallet: string;
 }

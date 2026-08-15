@@ -1,63 +1,30 @@
 import {
   User,
-  DuesCycle,
-  DuesRecord,
-  Loan,
   Transaction,
-  Pocket,
-  Election,
-  VoteRecord,
+  MemberLoan,
   SystemConfig,
-  UserRole,
+  TransactionCategory,
+  PaymentMethod,
 } from '../types';
 
-const STORAGE_KEY = 'kas_tongkrongan_clean_v2';
-const BROADCAST_CHANNEL_NAME = 'kas_tongkrongan_sync_channel';
+const STORAGE_KEY = 'kas_tongkrongan_v3_bendahara';
+const BROADCAST_CHANNEL_NAME = 'kas_tongkrongan_sync_v3';
 
 export interface AppState {
-  currentUser: User | null;
   users: User[];
-  config: SystemConfig;
-  activeCycle: DuesCycle;
-  pastCycles: DuesCycle[];
-  duesRecords: DuesRecord[];
-  loans: Loan[];
+  loans: MemberLoan[];
   transactions: Transaction[];
-  pockets: Pocket[];
-  election: Election;
-  votes: VoteRecord[];
-  lastAuditDate: string;
+  config: SystemConfig;
 }
 
-const DEFAULT_CONFIG: SystemConfig = {
+export const DEFAULT_CONFIG: SystemConfig = {
   weekly_target: 20000,
-  daily_dues_fine: 500,
-  daily_loan_fine: 1000,
-  loan_max_multiplier: 1.0,
-  loan_term_days: 7,
-  treasurer_name: 'Belum Ditentukan',
-  treasurer_ewallet: 'DANA (08xx-xxxx-xxxx)',
-  treasurer_account_number: 'Rekening Bendahara (BCA/Mandiri)',
-  treasurer_bank_name: 'Bank Central Asia (BCA)',
-  treasurer_phone: '-',
-};
-
-const DEFAULT_CYCLE: DuesCycle = {
-  id: 'cycle_current',
-  cycle_name: 'Periode Minggu Berjalan',
-  target_amount: 20000,
-  start_date: new Date().toISOString(),
-  end_date: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(),
-  is_active: true,
-};
-
-const DEFAULT_ELECTION: Election = {
-  id: 'elect_current',
-  title: 'Pemilihan Bendahara Kas Tongkrongan',
-  status: 'open',
-  start_date: new Date().toISOString(),
-  end_date: new Date(Date.now() + 14 * 24 * 60 * 60 * 1000).toISOString(),
-  candidates: [],
+  default_credit_limit: 20000, // 20K per member
+  treasurer_name: 'Bendahara Tongkrongan',
+  treasurer_phone: '0812-3456-7890',
+  treasurer_bank_name: 'Bank BCA',
+  treasurer_account_number: '1234567890',
+  treasurer_ewallet: 'DANA (0812-3456-7890)',
 };
 
 export const AVATAR_COLORS = [
@@ -73,11 +40,6 @@ export const AVATAR_COLORS = [
 
 export function getInitialState(): AppState {
   try {
-    // Clear legacy dummy key if present
-    if (localStorage.getItem('kas_tongkrongan_data_v1')) {
-      localStorage.removeItem('kas_tongkrongan_data_v1');
-    }
-
     const saved = localStorage.getItem(STORAGE_KEY);
     if (saved) {
       const parsed = JSON.parse(saved);
@@ -89,20 +51,11 @@ export function getInitialState(): AppState {
     console.error('Failed to load state from localStorage', err);
   }
 
-  // Pure clean state with NO dummy data, NO dummy users, NO dummy transactions
   const initial: AppState = {
-    currentUser: null,
     users: [],
-    config: DEFAULT_CONFIG,
-    activeCycle: DEFAULT_CYCLE,
-    pastCycles: [],
-    duesRecords: [],
     loans: [],
     transactions: [],
-    pockets: [],
-    election: DEFAULT_ELECTION,
-    votes: [],
-    lastAuditDate: new Date().toISOString(),
+    config: DEFAULT_CONFIG,
   };
 
   saveState(initial);
@@ -160,128 +113,161 @@ export function subscribeToStateUpdates(callback: (state: AppState) => void): ()
   };
 }
 
-// Financial calculation helper:
-export function calculateFinancials(state: AppState) {
-  const totalInPockets = state.pockets.reduce((sum, p) => sum + p.current_balance, 0);
-
-  const borrowedAmount = state.loans
-    .filter((l) => l.status === 'approved')
-    .reduce((sum, l) => sum + l.amount, 0);
-
-  const totalCollectedDues = state.duesRecords.reduce((sum, r) => sum + r.amount_paid, 0);
-
-  const totalPendingFines =
-    state.duesRecords.reduce((sum, r) => sum + r.fine_amount, 0) +
-    state.loans.filter((l) => l.status === 'approved').reduce((sum, l) => sum + l.fine_amount, 0);
-
-  const availableBalance = totalInPockets;
-  const totalKasKomunal = availableBalance + borrowedAmount;
-
-  return {
-    totalKasKomunal,
-    availableBalance,
-    borrowedAmount,
-    totalCollectedDues,
-    totalPendingFines,
-  };
+// Format numbers with thousand separator dots (e.g. 50000 -> 50.000)
+export function formatRupiah(amount: number): string {
+  return new Intl.NumberFormat('id-ID').format(amount);
 }
 
-// Daily Audit & Fine Calculation Engine
-export function runDailyAuditEngine(state: AppState): {
-  updatedState: AppState;
-  duesFinesAdded: number;
-  loanFinesAdded: number;
-  auditNotes: string[];
-} {
+// Parse string with thousand dots or commas to number
+export function parseRupiahInput(value: string): number {
+  const digitsOnly = value.replace(/\D/g, '');
+  return digitsOnly ? parseInt(digitsOnly, 10) : 0;
+}
+
+// Financial calculations for the main dashboard
+export function calculateFinancialSummary(state: AppState) {
+  let totalKasMasuk = 0;
+  let totalKasKeluar = 0;
+  let totalMasukBulanIni = 0;
+  let totalKeluarBulanIni = 0;
+
   const now = new Date();
-  const auditNotes: string[] = [];
-  let duesFinesAdded = 0;
-  let loanFinesAdded = 0;
+  const thirtyDaysAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
 
-  if (state.duesRecords.length === 0 && state.loans.length === 0) {
-    return {
-      updatedState: { ...state, lastAuditDate: now.toISOString() },
-      duesFinesAdded: 0,
-      loanFinesAdded: 0,
-      auditNotes: ['Belum ada catatan iuran atau pinjaman untuk diaudit.'],
-    };
-  }
-
-  // 1. Audit Dues: for any member who hasn't paid full target (or is overdue)
-  const updatedDuesRecords = state.duesRecords.map((record) => {
-    if (record.amount_paid < record.target_amount) {
-      const newDaysLate = record.days_late + 1;
-      const additionalFine = state.config.daily_dues_fine;
-      duesFinesAdded += additionalFine;
-      auditNotes.push(
-        `Denda iuran Rp${additionalFine.toLocaleString('id-ID')} ditambahkan untuk ${record.user_name} (Keterlambatan: ${newDaysLate} hari).`
-      );
-      return {
-        ...record,
-        status: 'overdue' as const,
-        days_late: newDaysLate,
-        fine_amount: record.fine_amount + additionalFine,
-        last_updated: now.toISOString(),
-      };
-    }
-    return record;
-  });
-
-  // 2. Audit Loans: for any approved loan past 7 days due date
-  const updatedLoans = state.loans.map((loan) => {
-    if (loan.status === 'approved') {
-      const dueDate = new Date(loan.due_date);
-      if (now > dueDate) {
-        const diffTime = Math.abs(now.getTime() - dueDate.getTime());
-        const daysPast = Math.max(1, Math.ceil(diffTime / (1000 * 60 * 60 * 24)));
-        const additionalFine = state.config.daily_loan_fine;
-        loanFinesAdded += additionalFine;
-        auditNotes.push(
-          `Denda pinjaman Rp${additionalFine.toLocaleString('id-ID')} ditambahkan untuk ${loan.user_name} (Melewati jatuh tempo ${daysPast} hari).`
-        );
-        return {
-          ...loan,
-          days_overdue: daysPast,
-          fine_amount: loan.fine_amount + additionalFine,
-        };
+  state.transactions.forEach((tx) => {
+    const txDate = new Date(tx.created_at);
+    if (tx.direction === 'masuk') {
+      totalKasMasuk += tx.amount;
+      if (txDate >= thirtyDaysAgo) {
+        totalMasukBulanIni += tx.amount;
+      }
+    } else {
+      totalKasKeluar += tx.amount;
+      if (txDate >= thirtyDaysAgo) {
+        totalKeluarBulanIni += tx.amount;
       }
     }
-    return loan;
   });
 
-  // 3. Create an automated audit transaction log
-  const newTransactions = [...state.transactions];
-  if (auditNotes.length > 0) {
-    const auditTx: Transaction = {
-      id: 'tx_audit_' + Date.now(),
-      type: 'fine_payment',
-      amount: duesFinesAdded + loanFinesAdded,
-      user_id: 'system',
-      user_name: 'Sistem Audit Otomatis (Cron WIB)',
-      method: 'tunai',
-      status: 'verified',
-      notes: `Akumulasi denda harian: ${duesFinesAdded > 0 ? `Iuran Rp${duesFinesAdded.toLocaleString('id-ID')}` : ''} ${
-        loanFinesAdded > 0 ? `Pinjaman Rp${loanFinesAdded.toLocaleString('id-ID')}` : ''
-      }. Catatan: ${auditNotes.join(' ')}`,
-      created_at: now.toISOString(),
-      verified_by: 'Sistem Pusat',
-    };
-    newTransactions.unshift(auditTx);
-  }
+  const saldoKasSaatIni = totalKasMasuk - totalKasKeluar;
 
-  const updatedState: AppState = {
-    ...state,
-    duesRecords: updatedDuesRecords,
-    loans: updatedLoans,
-    transactions: newTransactions,
-    lastAuditDate: now.toISOString(),
+  // Active Loans & Debt stats
+  const totalHutangBeredar = state.loans
+    .filter((l) => l.status === 'active' || l.status === 'overdue')
+    .reduce((sum, l) => sum + l.remaining_amount, 0);
+
+  const totalDendaTercatat = state.users.reduce((sum, u) => sum + (u.unpaid_fine || 0), 0);
+
+  return {
+    saldoKasSaatIni,
+    totalKasMasuk,
+    totalKasKeluar,
+    totalMasukBulanIni,
+    totalKeluarBulanIni,
+    totalHutangBeredar,
+    totalDendaTercatat,
+    totalTransaksi: state.transactions.length,
+    totalAnggota: state.users.length,
   };
-
-  saveState(updatedState);
-  return { updatedState, duesFinesAdded, loanFinesAdded, auditNotes };
 }
 
-// Reset data to pure empty state
+// Member Detailed Statistics Calculation
+export interface MemberStats {
+  totalMasuk: number;
+  masukPekanIni: number;
+  masukBulanIni: number;
+  sisaHutang: number;
+  dendaTertunda: number;
+  plafonKredit: number;
+  sisaKreditTersedia: number;
+  isCreditFrozen: boolean;
+  skorKepatuhan: number; // 0 - 100
+  labelKepatuhan: string; // 'Sangat Patuh', 'Patuh', 'Cukup', 'Perlu Perhatian'
+  badgeColor: string;
+  transaksiCount: number;
+}
+
+export function calculateMemberStats(user: User, state: AppState): MemberStats {
+  const now = new Date();
+  const sevenDaysAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+  const thirtyDaysAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+
+  let totalMasuk = 0;
+  let masukPekanIni = 0;
+  let masukBulanIni = 0;
+  let transaksiCount = 0;
+
+  state.transactions.forEach((tx) => {
+    if (tx.member_id === user.id && tx.direction === 'masuk') {
+      totalMasuk += tx.amount;
+      transaksiCount++;
+      const txDate = new Date(tx.created_at);
+      if (txDate >= sevenDaysAgo) {
+        masukPekanIni += tx.amount;
+      }
+      if (txDate >= thirtyDaysAgo) {
+        masukBulanIni += tx.amount;
+      }
+    }
+  });
+
+  // Calculate active loans for this member
+  const memberLoans = state.loans.filter(
+    (l) => l.member_id === user.id && (l.status === 'active' || l.status === 'overdue')
+  );
+  const sisaHutang = memberLoans.reduce((sum, l) => sum + l.remaining_amount, 0);
+  const dendaTertunda = user.unpaid_fine || 0;
+
+  const plafonKredit = user.credit_limit ?? 20000;
+  const isCreditFrozen = !!user.is_credit_frozen;
+  const sisaKreditTersedia = isCreditFrozen ? 0 : Math.max(0, plafonKredit - sisaHutang);
+
+  // Calculate compliance score (0-100)
+  let score = 100;
+  if (isCreditFrozen) score -= 40;
+  if (sisaHutang > 0) score -= 15;
+  if (dendaTertunda > 0) score -= 20;
+
+  // Bonus for active weekly contributions
+  if (masukPekanIni >= (state.config.weekly_target || 20000)) {
+    score = Math.min(100, score + 5);
+  }
+
+  score = Math.max(20, Math.min(100, score));
+
+  let labelKepatuhan = 'Sangat Patuh';
+  let badgeColor = 'bg-emerald-50 text-emerald-700 border-emerald-300';
+
+  if (score >= 90) {
+    labelKepatuhan = 'Sangat Patuh';
+    badgeColor = 'bg-emerald-50 text-emerald-700 border-emerald-300';
+  } else if (score >= 75) {
+    labelKepatuhan = 'Patuh';
+    badgeColor = 'bg-blue-50 text-blue-700 border-blue-300';
+  } else if (score >= 60) {
+    labelKepatuhan = 'Cukup';
+    badgeColor = 'bg-amber-50 text-amber-700 border-amber-300';
+  } else {
+    labelKepatuhan = 'Perlu Perhatian';
+    badgeColor = 'bg-rose-50 text-rose-700 border-rose-300';
+  }
+
+  return {
+    totalMasuk,
+    masukPekanIni,
+    masukBulanIni,
+    sisaHutang,
+    dendaTertunda,
+    plafonKredit,
+    sisaKreditTersedia,
+    isCreditFrozen,
+    skorKepatuhan: score,
+    labelKepatuhan,
+    badgeColor,
+    transaksiCount,
+  };
+}
+
 export function resetAppState(): AppState {
   localStorage.removeItem(STORAGE_KEY);
   const fresh = getInitialState();
