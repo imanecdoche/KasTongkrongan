@@ -259,6 +259,8 @@ export const RABModule: React.FC<RABModuleProps> = ({
           onShowToast={onShowToast}
           onOpenExecuteModal={() => setExecutionModalPlan(selectedPlan)}
           onOpenRefundModal={() => setRefundModalPlan(selectedPlan)}
+          onBack={() => setViewMode('list')}
+          onEdit={() => setViewMode('edit')}
         />
 
         {/* Modal Eksekusi */}
